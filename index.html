@@ -15,15 +15,20 @@ body {
   min-height: 100vh;
   font-family: 'Courier New', monospace;
   user-select: none;
+  overflow: hidden;
 }
-h1 { color: #8B00FF; font-size: 22px; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 12px #8B00FF; }
-#hud { display: flex; gap: 32px; color: #fff; font-size: 15px; font-weight: bold; margin-bottom: 6px; }
-canvas { display: block; border: 2px solid #003399; box-shadow: 0 0 20px #003399; }
-#msg { color: #FFD700; font-size: 14px; margin-top: 8px; height: 20px; text-align: center; }
+#hud {
+  display: flex; gap: 28px;
+  color: #fff; font-size: 14px; font-weight: bold;
+  margin-bottom: 4px;
+}
+#title { color: #8B00FF; font-size: 18px; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 0 10px #8B00FF; }
+canvas { display: block; image-rendering: pixelated; }
+#msg { color: #FFD700; font-size: 13px; margin-top: 5px; height: 18px; text-align: center; }
 </style>
 </head>
 <body>
-<h1>🎭 TASCHEN-MAN</h1>
+<div id="title">🎭 TASCHEN-MAN — MOSSAD EDITION</div>
 <div id="hud">
   <span>SCORE: <span id="score">0</span></span>
   <span>❤️ <span id="lives">3</span></span>
@@ -33,656 +38,819 @@ canvas { display: block; border: 2px solid #003399; box-shadow: 0 0 20px #003399
 <div id="msg">Press ENTER or SPACE to start</div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════════════
-const C   = document.getElementById('c');
-const ctx = C.getContext('2d');
-const CELL = 30;
-const COLS = 19;
-const ROWS = 21;
-C.width  = COLS * CELL;
-C.height = ROWS * CELL;
+// ═══════════════════════════════════════════════════
+//  SCREEN SETUP — fit MacBook Pro 13"
+// ═══════════════════════════════════════════════════
+const COLS = 19, ROWS = 21;
+const DPR  = window.devicePixelRatio || 1;
 
+// Available screen space (leave ~80px for HUD + title + msg)
+const avH = Math.min(window.innerHeight - 80, 780);
+const avW = window.innerWidth - 20;
+// Pick largest even CELL that fits
+let CELL = Math.floor(Math.min(avH / ROWS, avW / COLS));
+if (CELL % 2 !== 0) CELL--;          // must be even (speed=2 math)
+CELL = Math.max(24, Math.min(40, CELL));
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+// Retina / HiDPI: render at 2× then scale down via CSS for crisp look
+canvas.width  = COLS * CELL * DPR;
+canvas.height = ROWS * CELL * DPR;
+canvas.style.width  = `${COLS * CELL}px`;
+canvas.style.height = `${ROWS * CELL}px`;
+ctx.scale(DPR, DPR);
+
+// ═══════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════
 const SPEED_PLAYER   = 2;
 const SPEED_OFFICIAL = 2;
 const SPEED_SCARED   = 1;
 const SPEED_RETURN   = 2;
-const PILOT_FRAMES   = 720;   // 12 s @ 60 fps
-const WARN_FRAMES    = 240;   // last 4 s → flash warning
+const PILOT_FRAMES   = 600;   // 10 s @ 60 fps
+const WARN_FRAMES    = 180;   // flash warning last 3 s
 
-// Cell types
-const WALL = 1, DOT = 0, MASK = 2, EMPTY = 3, HQ = 4, DOOR = 5;
+const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
+const UP={dx:0,dy:-1}, DOWN={dx:0,dy:1}, LEFT={dx:-1,dy:0}, RIGHT={dx:1,dy:0};
+const DIRS=[UP,DOWN,LEFT,RIGHT];
 
-const UP    = { dx:  0, dy: -1 };
-const DOWN  = { dx:  0, dy:  1 };
-const LEFT  = { dx: -1, dy:  0 };
-const RIGHT = { dx:  1, dy:  0 };
-const DIRS  = [UP, DOWN, LEFT, RIGHT];
+const scoreEl=document.getElementById('score');
+const livesEl=document.getElementById('lives');
+const levelEl=document.getElementById('level');
+const msgEl  =document.getElementById('msg');
 
-// ═══════════════════════════════════════════════════════
-//  MAZE  (19 cols × 21 rows)
-//  0=dot  1=wall  2=mask  3=empty  4=hq-inside  5=hq-door
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  MAZE  (19 × 21)
+// ═══════════════════════════════════════════════════
 const BASE = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 0
   [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1], // 1
   [1,0,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,0,1], // 2
-  [1,2,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,2,1], // 3  ← masks top
+  [1,2,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,2,1], // 3
   [1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1], // 4
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // 5  ← open corridor
-  [1,0,1,1,0,1,1,0,1,0,0,0,1,0,1,1,0,0,1], // 6  above HQ
-  [1,0,1,1,0,1,1,0,1,5,5,5,1,0,1,1,0,0,1], // 7  ← HQ door (DOOR=5)
-  [1,0,0,0,0,0,0,0,1,4,4,4,1,0,0,0,0,0,1], // 8  HQ interior
-  [3,3,3,3,0,1,1,0,1,4,4,4,1,0,1,1,0,3,3], // 9  tunnel + HQ
-  [1,1,1,1,0,1,1,0,1,4,4,4,1,0,1,1,0,1,1], // 10 HQ interior
-  [1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1], // 11 below HQ
-  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], // 12
-  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], // 13
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // 14 ← open corridor
-  [1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1], // 15
-  [1,2,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,2,1], // 16 ← masks bottom
-  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1], // 17
-  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,0,1], // 18
-  [1,0,1,1,0,1,1,0,1,3,3,3,1,0,1,1,0,0,1], // 19 player spawn
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 20
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // 5
+  [1,0,1,1,0,1,1,0,1,0,0,0,1,0,1,1,0,0,1], // 6
+  [1,0,1,1,0,1,1,0,1,5,5,5,1,0,1,1,0,0,1], // 7  ← HQ door
+  [1,0,0,0,0,0,0,0,1,4,4,4,1,0,0,0,0,0,1], // 8  ← HQ interior
+  [3,3,3,3,0,1,1,0,1,4,4,4,1,0,1,1,0,3,3], // 9  tunnel
+  [1,1,1,1,0,1,1,0,1,4,4,4,1,0,1,1,0,1,1], //10  ← HQ interior
+  [1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1], //11
+  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], //12
+  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], //13
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], //14
+  [1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1], //15
+  [1,2,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,2,1], //16
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1], //17
+  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,0,1], //18
+  [1,0,1,1,0,1,1,0,1,3,3,3,1,0,1,1,0,0,1], //19  player spawn
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], //20
 ];
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  BUILDING TYPE PRE-ASSIGNMENT
+//  6 regular types (0-5), greedy coloring so no two
+//  adjacent wall cells share the same type.
+// ═══════════════════════════════════════════════════
+const bType = Array.from({length:ROWS}, ()=>new Array(COLS).fill(-1));
+(function assignBuildings() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (BASE[r][c] !== WALL) continue;
+      const used = new Set();
+      [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dr,dc]) => {
+        const nr=r+dr, nc=c+dc;
+        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&bType[nr][nc]>=0) used.add(bType[nr][nc]);
+      });
+      for (let t=0;t<6;t++) { if(!used.has(t)){bType[r][c]=t;break;} }
+      if (bType[r][c]<0) bType[r][c]=0; // fallback
+    }
+  }
+})();
+
+// ═══════════════════════════════════════════════════
 //  GAME STATE
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 let maze, score, lives, level;
-let gameState; // 'start' | 'playing' | 'dead' | 'levelclear' | 'gameover'
+let gameState; // 'start'|'playing'|'dead'|'levelclear'|'gameover'
 let dotsLeft, pilotTimer, multKill, animFrame;
 let player, officials;
 const floats = [];
 
-const scoreEl = document.getElementById('score');
-const livesEl = document.getElementById('lives');
-const levelEl = document.getElementById('level');
-const msgEl   = document.getElementById('msg');
+// Trap-door animation state
+let trap = null;
+// trap = { col, row, phase:'opening'|'open'|'closing', frame, maxFrames }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  HELPERS
-// ═══════════════════════════════════════════════════════
-const ctr = (col, row) => ({ x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 });
+// ═══════════════════════════════════════════════════
+const ctr  = (c,r) => ({ x: c*CELL + CELL/2, y: r*CELL + CELL/2 });
+const col  = x => Math.floor(x/CELL);
+const row  = y => Math.floor(y/CELL);
+const atCenter = (x,y) => x%CELL===CELL/2 && y%CELL===CELL/2;
 
-function cell(col, row) {
-  if (row < 0 || row >= ROWS) return WALL;
-  const c = ((col % COLS) + COLS) % COLS;
-  return maze[row][c];
+function getCell(c,r) {
+  if (r<0||r>=ROWS) return WALL;
+  return maze[r][((c%COLS)+COLS)%COLS];
 }
-function setCell(col, row, v) {
-  maze[row][((col % COLS) + COLS) % COLS] = v;
-}
-// Can this entity walk into (col,row)?
-// canHQ: true = HQ/door cells passable (used only for returning+exiting officials)
-function walkable(col, row, canHQ) {
-  const t = cell(col, row);
-  if (t === WALL)               return false;
-  if (t === HQ || t === DOOR)   return !!canHQ;
+function setCell(c,r,v) { maze[r][((c%COLS)+COLS)%COLS]=v; }
+function walkable(c,r,canHQ) {
+  const t=getCell(c,r);
+  if (t===WALL) return false;
+  if (t===HQ||t===DOOR) return !!canHQ;
   return true;
 }
-
-// Is entity pixel-position snapped to a cell center? (speed=2, cell=30 → half=15, centers at 15,45,75…)
-function atCenter(x, y) {
-  return x % CELL === CELL / 2 && y % CELL === CELL / 2;
-}
-const col = x => Math.floor(x / CELL);
-const row = y => Math.floor(y / CELL);
-
 function hud() {
-  scoreEl.textContent = score;
-  livesEl.textContent = lives;
-  levelEl.textContent = level;
+  scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level;
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  INIT
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function initGame() {
-  score = 0; lives = 3; level = 1;
-  hud();
+  score=0; lives=3; level=1; hud();
   initLevel();
-  gameState = 'start';
-  msgEl.textContent = 'Press ENTER or SPACE to start';
+  gameState='start';
+  msgEl.textContent='Press ENTER or SPACE to start';
 }
 
 function initLevel() {
-  maze = BASE.map(r => [...r]);
-  dotsLeft  = 0;
-  maze.forEach(r => r.forEach(v => { if (v === DOT || v === MASK) dotsLeft++; }));
-  pilotTimer = 0; multKill = 0; animFrame = 0;
-  floats.length = 0;
+  maze=BASE.map(r=>[...r]);
+  dotsLeft=0;
+  maze.forEach(r=>r.forEach(v=>{if(v===DOT||v===MASK)dotsLeft++;}));
+  pilotTimer=0; multKill=0; animFrame=0; floats.length=0; trap=null;
 
-  // Player — bottom center
-  const ps = ctr(10, 19);
-  player = {
-    x: ps.x, y: ps.y,
-    dir: LEFT, nextDir: LEFT,
-    pilotMode: false,
-    mouth: 0.2, mouthDir: 1,
+  const ps=ctr(10,19);
+  player={
+    x:ps.x, y:ps.y,
+    dir:LEFT, nextDir:LEFT,
+    pilotMode:false,
+    visible:true,       // false while underground
+    mouth:0.2, mouthDir:1,
+    trapCol:10, trapRow:19, // where the trap door is
   };
 
-  // Officials — start OUTSIDE HQ, spread around the maze
-  //   Each has a Pac-Man ghost personality:
-  //   0=Blinky(direct), 1=Pinky(ambush), 2=Inky(flank), 3=Clyde(shy)
-  const starts = [
-    { col: 4,  row: 1,  dir: RIGHT, color: '#dd2200', face: '😠' }, // Blinky top-left
-    { col: 14, row: 1,  dir: LEFT,  color: '#dd6600', face: '😡' }, // Pinky  top-right
-    { col: 1,  row: 14, dir: RIGHT, color: '#007755', face: '🤬' }, // Inky   left-mid
-    { col: 17, row: 14, dir: LEFT,  color: '#660077', face: '😤' }, // Clyde  right-mid
+  // Four officials start OUTSIDE HQ, spread around the maze
+  // Personalities: 0=Blinky(direct) 1=Pinky(ambush) 2=Inky(flank) 3=Clyde(shy)
+  const starts=[
+    {c:4,  r:1,  dir:RIGHT, color:'#cc2200', face:'😠'}, // Blinky
+    {c:14, r:1,  dir:LEFT,  color:'#cc6600', face:'😡'}, // Pinky
+    {c:1,  r:14, dir:RIGHT, color:'#005c3a', face:'🤬'}, // Inky
+    {c:17, r:14, dir:LEFT,  color:'#550066', face:'😤'}, // Clyde
   ];
-
-  officials = starts.map((s, i) => {
-    const p = ctr(s.col, s.row);
-    return {
-      x: p.x, y: p.y,
-      dir: s.dir,
-      state: 'chase',   // 'chase' | 'scared' | 'dead' | 'return' | 'hq'
-      pers: i,
-      eatDelay: 0,
-      releaseTimer: 0,
-      color: s.color,
-      face: s.face,
-    };
+  officials=starts.map((s,i)=>{
+    const p=ctr(s.c,s.r);
+    return { x:p.x,y:p.y, dir:s.dir, state:'chase', pers:i,
+             eatDelay:0, releaseTimer:0, color:s.color, face:s.face };
   });
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  INPUT
-// ═══════════════════════════════════════════════════════
-document.addEventListener('keydown', e => {
-  if (e.code === 'Enter' || e.code === 'Space') {
-    if (gameState === 'start' || gameState === 'dead') {
-      if (gameState === 'dead') initLevel();
-      gameState = 'playing'; msgEl.textContent = ''; return;
+// ═══════════════════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  if (e.code==='Enter'||e.code==='Space') {
+    if (gameState==='start'||gameState==='dead') {
+      if(gameState==='dead') initLevel();
+      gameState='playing'; msgEl.textContent=''; return;
     }
-    if (gameState === 'levelclear') {
-      level++; levelEl.textContent = level; initLevel();
-      gameState = 'playing'; msgEl.textContent = ''; return;
+    if (gameState==='levelclear') {
+      level++; levelEl.textContent=level; initLevel();
+      gameState='playing'; msgEl.textContent=''; return;
     }
-    if (gameState === 'gameover') { initGame(); gameState = 'start'; return; }
+    if (gameState==='gameover') { initGame(); gameState='start'; return; }
   }
-  if (gameState !== 'playing') return;
-  if (e.code === 'ArrowLeft'  || e.code === 'KeyA') player.nextDir = LEFT;
-  if (e.code === 'ArrowRight' || e.code === 'KeyD') player.nextDir = RIGHT;
-  if (e.code === 'ArrowUp'    || e.code === 'KeyW') player.nextDir = UP;
-  if (e.code === 'ArrowDown'  || e.code === 'KeyS') player.nextDir = DOWN;
+  if (gameState!=='playing') return;
+  if (e.code==='ArrowLeft' ||e.code==='KeyA') player.nextDir=LEFT;
+  if (e.code==='ArrowRight'||e.code==='KeyD') player.nextDir=RIGHT;
+  if (e.code==='ArrowUp'   ||e.code==='KeyW') player.nextDir=UP;
+  if (e.code==='ArrowDown' ||e.code==='KeyS') player.nextDir=DOWN;
 });
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  PLAYER MOVEMENT
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function movePlayer() {
-  // At cell center: try to turn
-  if (atCenter(player.x, player.y)) {
-    const c = col(player.x), r = row(player.y);
-    if (walkable(c + player.nextDir.dx, r + player.nextDir.dy, false))
-      player.dir = player.nextDir;
-    if (!walkable(c + player.dir.dx, r + player.dir.dy, false))
-      return; // blocked — stay put
+  if (!player.visible) return; // underground — plane handles movement
+  if (atCenter(player.x,player.y)) {
+    const c=col(player.x), r=row(player.y);
+    if (walkable(c+player.nextDir.dx, r+player.nextDir.dy, false))
+      player.dir=player.nextDir;
+    if (!walkable(c+player.dir.dx, r+player.dir.dy, false)) return;
   }
-  player.x += player.dir.dx * SPEED_PLAYER;
-  player.y += player.dir.dy * SPEED_PLAYER;
-  // tunnel wrap
-  if (player.x < 0)            player.x += COLS * CELL;
-  if (player.x >= COLS * CELL) player.x -= COLS * CELL;
+  player.x+=player.dir.dx*SPEED_PLAYER;
+  player.y+=player.dir.dy*SPEED_PLAYER;
+  if (player.x<0)           player.x+=COLS*CELL;
+  if (player.x>=COLS*CELL)  player.x-=COLS*CELL;
+}
+
+function movePlane() {
+  // Plane uses same movement logic as player but visible=false (underground body)
+  if (!player.pilotMode) return;
+  if (atCenter(player.x,player.y)) {
+    const c=col(player.x), r=row(player.y);
+    if (walkable(c+player.nextDir.dx, r+player.nextDir.dy, false))
+      player.dir=player.nextDir;
+    if (!walkable(c+player.dir.dx, r+player.dir.dy, false)) return;
+  }
+  player.x+=player.dir.dx*SPEED_PLAYER;
+  player.y+=player.dir.dy*SPEED_PLAYER;
+  if (player.x<0)           player.x+=COLS*CELL;
+  if (player.x>=COLS*CELL)  player.x-=COLS*CELL;
 }
 
 function collectDot() {
-  if (!atCenter(player.x, player.y)) return;
-  const c = col(player.x), r = row(player.y);
-  const t = cell(c, r);
+  if (!atCenter(player.x,player.y)) return;
+  const c=col(player.x), r=row(player.y);
+  const t=getCell(c,r);
 
-  if (t === DOT) {
-    setCell(c, r, EMPTY); score += 10; dotsLeft--; hud();
-    if (dotsLeft <= 0) { gameState = 'levelclear'; msgEl.textContent = `🎉 Level ${level} done! ENTER to continue`; }
+  if (t===DOT) {
+    setCell(c,r,EMPTY); score+=10; dotsLeft--; hud();
+    if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ENTER to continue`;}
 
-  } else if (t === MASK) {
-    setCell(c, r, EMPTY); score += 50; dotsLeft--; hud();
-    if (dotsLeft <= 0) { gameState = 'levelclear'; msgEl.textContent = `🎉 Level ${level} done! ENTER to continue`; return; }
-    pilotTimer = PILOT_FRAMES;
-    player.pilotMode = true;
-    multKill = 0;
-    // All outside officials go scared and IMMEDIATELY reverse direction
-    officials.forEach(o => {
-      if (o.state === 'chase') {
-        o.state = 'scared';
-        o.eatDelay = 60;
-        o.dir = { dx: -o.dir.dx, dy: -o.dir.dy }; // reverse
+  } else if (t===MASK) {
+    setCell(c,r,EMPTY); score+=50; dotsLeft--; hud();
+    if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ENTER to continue`;return;}
+    // Open trap door — operative drops underground, plane emerges
+    player.trapCol=c; player.trapRow=r;
+    trap={col:c, row:r, phase:'opening', frame:0, maxFrames:22};
+    // Officials reverse and go scared
+    officials.forEach(o=>{
+      if(o.state==='chase'){
+        o.state='scared'; o.eatDelay=60;
+        o.dir={dx:-o.dir.dx, dy:-o.dir.dy};
       }
     });
-    msgEl.textContent = '✈️ PILOT MODE! Hunt them down!';
-    setTimeout(() => { if (gameState === 'playing') msgEl.textContent = ''; }, 2000);
+    msgEl.textContent='✈️ PILOT MODE! Hunt them down!';
+    setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},2000);
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  OFFICIAL MOVEMENT & AI
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  TRAP DOOR ANIMATION
+// ═══════════════════════════════════════════════════
+function updateTrap() {
+  if (!trap) return;
+  trap.frame++;
+
+  if (trap.phase==='opening') {
+    if (trap.frame===10) {
+      // Operative drops in — becomes invisible, pilot mode starts
+      player.visible=false;
+      player.pilotMode=true;
+      pilotTimer=PILOT_FRAMES;
+      multKill=0;
+    }
+    if (trap.frame>=trap.maxFrames) { trap.phase='open'; trap.frame=0; }
+
+  } else if (trap.phase==='open') {
+    // Nothing — stays open during pilot mode
+
+  } else if (trap.phase==='closing') {
+    if (trap.frame===10) {
+      // Operative climbs back out
+      const p=ctr(trap.col,trap.row);
+      player.x=p.x; player.y=p.y;
+      player.dir=UP; player.nextDir=UP;
+      player.visible=true;
+    }
+    if (trap.frame>=trap.maxFrames) { trap=null; }
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  OFFICIAL AI
+// ═══════════════════════════════════════════════════
 function chaseTarget(o) {
-  // Pac-Man ghost AI per personality
-  const pc = col(player.x), pr = row(player.y);
-  const pdx = player.dir.dx, pdy = player.dir.dy;
-
-  if (o.pers === 0) { // Blinky — direct chase
-    return { c: pc, r: pr };
+  const pc=col(player.x), pr=row(player.y);
+  const pdx=player.dir.dx, pdy=player.dir.dy;
+  if (o.pers===0) return {c:pc,r:pr};
+  if (o.pers===1) return {c:pc+pdx*4, r:pr+pdy*4};
+  if (o.pers===2) {
+    const b=officials[0];
+    const bc=col(b.x),br=row(b.y), ac=pc+pdx*2, ar=pr+pdy*2;
+    return {c:ac*2-bc, r:ar*2-br};
   }
-  if (o.pers === 1) { // Pinky — 4 tiles ahead of player
-    return { c: pc + pdx * 4, r: pr + pdy * 4 };
+  if (o.pers===3) {
+    const d=Math.abs(col(o.x)-pc)+Math.abs(row(o.y)-pr);
+    return d>8?{c:pc,r:pr}:{c:1,r:17};
   }
-  if (o.pers === 2) { // Inky — flank via Blinky
-    const b = officials[0];
-    const bc = col(b.x), br = row(b.y);
-    const ac = pc + pdx * 2, ar = pr + pdy * 2;
-    return { c: ac * 2 - bc, r: ar * 2 - br };
-  }
-  if (o.pers === 3) { // Clyde — chase if far, scatter if close
-    const d = Math.abs(col(o.x) - pc) + Math.abs(row(o.y) - pr);
-    return d > 8 ? { c: pc, r: pr } : { c: 1, r: 17 };
-  }
-  return { c: pc, r: pr };
+  return {c:pc,r:pr};
 }
 
-function pickDir(o, targetC, targetR, isHQ, maximize) {
-  const oc = col(o.x), or_ = row(o.y);
-  const best = DIRS
-    .filter(d => {
-      const nc = oc + d.dx, nr = or_ + d.dy;
-      // never reverse (unless no other option)
-      if (d.dx === -o.dir.dx && d.dy === -o.dir.dy) return false;
-      return walkable(nc, nr, isHQ);
+function pickDir(o,tc,tr,canHQ,maximize) {
+  const oc=col(o.x), or_=row(o.y);
+  let candidates=DIRS
+    .filter(d=>!(d.dx===-o.dir.dx&&d.dy===-o.dir.dy)&&walkable(oc+d.dx,or_+d.dy,canHQ))
+    .map(d=>{
+      const nc=((oc+d.dx)%COLS+COLS)%COLS, nr=or_+d.dy;
+      return {d, dist:Math.abs(nc-tc)+Math.abs(nr-tr)};
     })
-    .map(d => {
-      const nc = ((oc + d.dx) % COLS + COLS) % COLS;
-      const nr = or_ + d.dy;
-      const dist = Math.abs(nc - targetC) + Math.abs(nr - targetR);
-      return { d, dist };
-    })
-    .sort((a, b) => maximize ? b.dist - a.dist : a.dist - b.dist);
-
-  if (best.length > 0) {
-    o.dir = best[0].d;
-  } else {
-    // stuck — allow reversal
-    const rev = DIRS.find(d => walkable(oc + d.dx, or_ + d.dy, isHQ));
-    if (rev) o.dir = rev;
-  }
+    .sort((a,b)=>maximize?b.dist-a.dist:a.dist-b.dist);
+  if (!candidates.length)
+    candidates=DIRS.filter(d=>walkable(oc+d.dx,or_+d.dy,canHQ)).map(d=>({d,dist:0}));
+  if (candidates.length) o.dir=candidates[0].d;
 }
 
 function moveOfficial(o) {
-  const oc = col(o.x), or_ = row(o.y);
-
-  // At cell center — choose next direction based on state
-  if (atCenter(o.x, o.y)) {
-
-    if (o.state === 'chase') {
-      const t = chaseTarget(o);
-      pickDir(o, t.c, t.r, false, false); // chase = minimize dist, no HQ
-
-    } else if (o.state === 'scared') {
-      // Random direction (authentic Pac-Man frightened behavior)
-      const valid = DIRS.filter(d => {
-        if (d.dx === -o.dir.dx && d.dy === -o.dir.dy) return false;
-        return walkable(oc + d.dx, or_ + d.dy, false);
-      });
-      if (valid.length > 0) o.dir = valid[Math.floor(Math.random() * valid.length)];
-
-    } else if (o.state === 'return') {
-      // Returning to HQ: navigate to just above door, then drop in
-      if (or_ <= 7 && oc >= 9 && oc <= 11) {
-        pickDir(o, oc, 9, true, false); // drop straight down through door
-      } else {
-        pickDir(o, 10, 6, true, false); // navigate to above door
+  const oc=col(o.x), or_=row(o.y);
+  if (atCenter(o.x,o.y)) {
+    if (o.state==='chase') {
+      const t=chaseTarget(o); pickDir(o,t.c,t.r,false,false);
+    } else if (o.state==='scared') {
+      // Authentic Pac-Man frightened: random direction
+      const valid=DIRS.filter(d=>!(d.dx===-o.dir.dx&&d.dy===-o.dir.dy)&&walkable(oc+d.dx,or_+d.dy,false));
+      if (valid.length) o.dir=valid[Math.floor(Math.random()*valid.length)];
+    } else if (o.state==='return') {
+      if (getCell(oc,or_)===HQ) {
+        const p=ctr(10,9); o.x=p.x; o.y=p.y;
+        o.state='hq'; o.releaseTimer=180; o.dir=DOWN; return;
       }
-      // Arrived inside HQ?
-      if (cell(oc, or_) === HQ) {
-        const p = ctr(10, 9);
-        o.x = p.x; o.y = p.y;
-        o.state = 'hq'; o.releaseTimer = 180; o.dir = DOWN;
-        return;
-      }
-
-    } else if (o.state === 'hq') {
-      // Bounce inside HQ until release timer
+      if (or_<=7&&oc>=9&&oc<=11) pickDir(o,oc,9,true,false);
+      else pickDir(o,10,6,true,false);
+    } else if (o.state==='hq') {
       if (!player.pilotMode) o.releaseTimer--;
-      if (o.releaseTimer <= 0) {
-        o.state = 'exit'; o.dir = UP;
-      } else {
-        // small bounce inside HQ
-        const valid = DIRS.filter(d => walkable(oc + d.dx, or_ + d.dy, true));
-        if (valid.length) o.dir = valid[Math.floor(Math.random() * valid.length)];
+      if (o.releaseTimer<=0) { o.state='exit'; o.dir=UP; }
+      else {
+        const v=DIRS.filter(d=>walkable(oc+d.dx,or_+d.dy,true));
+        if(v.length) o.dir=v[Math.floor(Math.random()*v.length)];
       }
-
-    } else if (o.state === 'exit') {
-      pickDir(o, 10, 6, true, false);
-      if (oc === 10 && or_ <= 6) o.state = 'chase';
+    } else if (o.state==='exit') {
+      pickDir(o,10,6,true,false);
+      if(oc===10&&or_<=6) o.state='chase';
     }
   }
-
-  // Move
-  const spd = o.state === 'scared' ? SPEED_SCARED
-            : o.state === 'return' ? SPEED_RETURN
-            : SPEED_OFFICIAL;
-
-  const nx = o.x + o.dir.dx * spd;
-  const ny = o.y + o.dir.dy * spd;
-  const nc = col(nx), nr = row(ny);
-  const canHQ = o.state === 'return' || o.state === 'hq' || o.state === 'exit';
-
-  // Only move if destination cell is walkable for this state
-  if (walkable(nc, nr, canHQ)) {
-    o.x = nx; o.y = ny;
-  } else {
-    // Hit wall — snap to current cell center and stop so next frame we re-pick direction
-    o.x = oc * CELL + CELL / 2;
-    o.y = or_ * CELL + CELL / 2;
-  }
-
-  // Tunnel wrap
-  if (o.x < 0)            o.x += COLS * CELL;
-  if (o.x >= COLS * CELL) o.x -= COLS * CELL;
-
-  // Safety: if somehow escaped bounds, reset to HQ
-  if (o.y < -CELL * 2 || o.y > (ROWS + 2) * CELL) {
-    const p = ctr(10, 9);
-    o.x = p.x; o.y = p.y;
-    o.state = 'hq'; o.releaseTimer = 120; o.dir = DOWN;
-  }
+  const spd=o.state==='scared'?SPEED_SCARED:o.state==='return'?SPEED_RETURN:SPEED_OFFICIAL;
+  const canHQ=o.state==='return'||o.state==='hq'||o.state==='exit';
+  const nx=o.x+o.dir.dx*spd, ny=o.y+o.dir.dy*spd;
+  if (walkable(col(nx),row(ny),canHQ)) { o.x=nx; o.y=ny; }
+  else { o.x=oc*CELL+CELL/2; o.y=or_*CELL+CELL/2; }
+  if(o.x<0) o.x+=COLS*CELL; if(o.x>=COLS*CELL) o.x-=COLS*CELL;
+  if(o.y<-CELL*2||o.y>(ROWS+2)*CELL){const p=ctr(10,9);o.x=p.x;o.y=p.y;o.state='hq';o.releaseTimer=120;o.dir=DOWN;}
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  COLLISIONS
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function checkCollisions() {
   for (const o of officials) {
-    if (o.state === 'return' || o.state === 'hq') continue;
-    const dx = player.x - o.x, dy = player.y - o.y;
-    if (Math.sqrt(dx * dx + dy * dy) > CELL * 0.65) continue;
-
-    if (player.pilotMode && o.state === 'scared' && o.eatDelay <= 0) {
+    if(o.state==='return'||o.state==='hq') continue;
+    const dx=player.x-o.x, dy=player.y-o.y;
+    if(Math.sqrt(dx*dx+dy*dy)>CELL*0.65) continue;
+    if(player.pilotMode&&o.state==='scared'&&o.eatDelay<=0) {
       multKill++;
-      const pts = 200 * (1 << (multKill - 1));
-      score += pts; hud();
-      floats.push({ text: `+${pts}`, x: o.x, y: o.y, alpha: 1 });
-      o.state = 'return'; o.dir = UP;
-
-    } else if (!player.pilotMode && o.state === 'chase') {
+      const pts=200*(1<<(multKill-1)); score+=pts; hud();
+      floats.push({text:`+${pts}`,x:o.x,y:o.y,alpha:1});
+      o.state='return'; o.dir=UP;
+    } else if(!player.pilotMode&&o.state==='chase'&&player.visible) {
       lives--; hud();
-      if (lives <= 0) {
-        gameState = 'gameover';
-        msgEl.textContent = 'GAME OVER — ENTER to restart';
-      } else {
-        gameState = 'dead';
-        msgEl.textContent = `💀 Caught! ${lives} lives left — ENTER to continue`;
-      }
+      if(lives<=0){gameState='gameover';msgEl.textContent='GAME OVER — ENTER to restart';}
+      else{gameState='dead';msgEl.textContent=`💀 Caught! ${lives} lives left — ENTER`;}
       return;
     }
   }
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  UPDATE
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function update() {
   animFrame++;
 
-  // Pilot timer
-  if (pilotTimer > 0) {
+  if (pilotTimer>0) {
     pilotTimer--;
-    if (pilotTimer === 0) {
-      player.pilotMode = false;
-      officials.forEach(o => { if (o.state === 'scared') o.state = 'chase'; });
-      msgEl.textContent = '⚠️ Back to normal!';
-      setTimeout(() => { if (gameState === 'playing') msgEl.textContent = ''; }, 1500);
+    if (pilotTimer===0) {
+      player.pilotMode=false;
+      officials.forEach(o=>{if(o.state==='scared')o.state='chase';});
+      // Plane leaves, trap door opens to let operative out
+      if(trap) { trap.phase='closing'; trap.frame=0; trap.maxFrames=24; }
+      else { player.visible=true; } // safety fallback
+      msgEl.textContent='⚠️ Plane left — operative back on the ground!';
+      setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},2000);
     }
   }
 
-  // Mouth
-  player.mouth += 0.06 * player.mouthDir;
-  if (player.mouth > 0.38) player.mouthDir = -1;
-  if (player.mouth < 0.02) player.mouthDir =  1;
+  player.mouth+=0.06*player.mouthDir;
+  if(player.mouth>0.38) player.mouthDir=-1;
+  if(player.mouth<0.02) player.mouthDir=1;
 
   movePlayer();
+  movePlane();
   collectDot();
-
-  officials.forEach(o => {
-    if (o.eatDelay > 0) o.eatDelay--;
-    moveOfficial(o);
-  });
-
+  updateTrap();
+  officials.forEach(o=>{ if(o.eatDelay>0)o.eatDelay--; moveOfficial(o); });
   checkCollisions();
+  for(let i=floats.length-1;i>=0;i--){floats[i].y-=1;floats[i].alpha-=0.02;if(floats[i].alpha<=0)floats.splice(i,1);}
+}
 
-  // Floats
-  for (let i = floats.length - 1; i >= 0; i--) {
-    floats[i].y -= 1; floats[i].alpha -= 0.02;
-    if (floats[i].alpha <= 0) floats.splice(i, 1);
+// ═══════════════════════════════════════════════════
+//  BUILDING DRAW FUNCTIONS (6 types)
+//  All drawn in CELL×CELL box, origin at top-left
+// ═══════════════════════════════════════════════════
+function drawBuilding(type, x, y) {
+  const s=CELL;
+  ctx.save(); ctx.translate(x,y);
+  switch(type) {
+    case 0: drawResidential(s); break;
+    case 1: drawApartment(s);   break;
+    case 2: drawShop(s);        break;
+    case 3: drawOffice(s);      break;
+    case 4: drawMosque(s);      break;
+    case 5: drawFactory(s);     break;
+  }
+  ctx.restore();
+}
+
+// Type 0 — Residential house (warm dark brown, pitched roof, 2 windows + door)
+function drawResidential(s) {
+  // Base wall
+  ctx.fillStyle='#5c3420'; ctx.fillRect(0,0,s,s);
+  // Pitched roof (dark)
+  ctx.fillStyle='#3a1e0e';
+  ctx.beginPath(); ctx.moveTo(0,s*0.42); ctx.lineTo(s*0.5,s*0.02); ctx.lineTo(s,s*0.42); ctx.closePath(); ctx.fill();
+  // Lit windows
+  ctx.fillStyle='#ffe070';
+  ctx.fillRect(s*0.08,s*0.48,s*0.3,s*0.2);
+  ctx.fillRect(s*0.62,s*0.48,s*0.3,s*0.2);
+  // Window cross
+  ctx.strokeStyle='#5c3420'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(s*0.08+s*0.15,s*0.48); ctx.lineTo(s*0.08+s*0.15,s*0.68); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s*0.08,s*0.48+s*0.1); ctx.lineTo(s*0.08+s*0.3,s*0.48+s*0.1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s*0.62+s*0.15,s*0.48); ctx.lineTo(s*0.62+s*0.15,s*0.68); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s*0.62,s*0.48+s*0.1); ctx.lineTo(s*0.62+s*0.3,s*0.48+s*0.1); ctx.stroke();
+  // Door
+  ctx.fillStyle='#8b4513';
+  ctx.fillRect(s*0.36,s*0.7,s*0.28,s*0.3);
+  ctx.fillStyle='#ffe070'; ctx.beginPath(); ctx.arc(s*0.585,s*0.84,s*0.03,0,Math.PI*2); ctx.fill();
+}
+
+// Type 1 — Apartment block (dark terracotta, grid windows, water tank)
+function drawApartment(s) {
+  ctx.fillStyle='#6b2a18'; ctx.fillRect(0,0,s,s);
+  // Horizontal divider lines (floors)
+  ctx.strokeStyle='#4a1a08'; ctx.lineWidth=1;
+  [0.33,0.55,0.77].forEach(f=>{ctx.beginPath();ctx.moveTo(0,s*f);ctx.lineTo(s,s*f);ctx.stroke();});
+  // Window grid 2×3
+  ctx.fillStyle='#ffe070';
+  [[0.08,0.1],[0.52,0.1],[0.08,0.38],[0.52,0.38],[0.08,0.62],[0.52,0.62]].forEach(([cx,cy])=>{
+    ctx.fillRect(s*cx,s*cy,s*0.35,s*0.16);
+  });
+  // Water tank on roof
+  ctx.fillStyle='#3a1008'; ctx.fillRect(s*0.3,0,s*0.4,s*0.06);
+}
+
+// Type 2 — Bazaar / shop (dark olive-green, coloured awning, display window)
+function drawShop(s) {
+  ctx.fillStyle='#2a3e1a'; ctx.fillRect(0,0,s,s);
+  // Upper windows
+  ctx.fillStyle='#ffe070';
+  ctx.fillRect(s*0.1,s*0.08,s*0.3,s*0.18);
+  ctx.fillRect(s*0.6,s*0.08,s*0.3,s*0.18);
+  // Awning (colourful stripes)
+  const awY=s*0.45, awH=s*0.14;
+  const aColors=['#cc3300','#ee6600','#cc3300','#ee6600'];
+  for(let i=0;i<4;i++){ctx.fillStyle=aColors[i];ctx.fillRect(i*s*0.25,awY,s*0.26,awH);}
+  ctx.strokeStyle='#441100'; ctx.lineWidth=1;
+  ctx.strokeRect(0,awY,s,awH);
+  // Display window (glass look)
+  ctx.fillStyle='rgba(140,210,255,0.18)';
+  ctx.strokeStyle='#4a6a2a'; ctx.lineWidth=1;
+  ctx.fillRect(s*0.06,s*0.62,s*0.88,s*0.34);
+  ctx.strokeRect(s*0.06,s*0.62,s*0.88,s*0.34);
+  ctx.beginPath(); ctx.moveTo(s*0.5,s*0.62); ctx.lineTo(s*0.5,s*0.96); ctx.stroke();
+}
+
+// Type 3 — Government office (dark navy, horizontal glass bands, antenna)
+function drawOffice(s) {
+  ctx.fillStyle='#1a2a48'; ctx.fillRect(0,0,s,s);
+  // Glass window bands
+  ctx.fillStyle='rgba(160,210,255,0.35)';
+  [0.12,0.30,0.48,0.66,0.82].forEach(f=>ctx.fillRect(s*0.04,s*f,s*0.92,s*0.12));
+  // Vertical dividers in bands
+  ctx.strokeStyle='rgba(100,160,220,0.3)'; ctx.lineWidth=0.5;
+  [0.3,0.55,0.8].forEach(x=>{
+    [0.12,0.30,0.48,0.66,0.82].forEach(f=>{ctx.beginPath();ctx.moveTo(s*x,s*f);ctx.lineTo(s*x,s*(f+0.12));ctx.stroke();});
+  });
+  // Antenna
+  ctx.strokeStyle='#8888aa'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(s*0.5,0); ctx.lineTo(s*0.5,-s*0.18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s*0.38,-s*0.1); ctx.lineTo(s*0.62,-s*0.1); ctx.stroke();
+}
+
+// Type 4 — Mosque / historic (warm brown, dome, arched windows, crescent)
+function drawMosque(s) {
+  ctx.fillStyle='#4a3a28'; ctx.fillRect(0,0,s,s);
+  // Dome
+  ctx.fillStyle='#6a5a3a';
+  ctx.beginPath(); ctx.arc(s*0.5,s*0.32,s*0.28,Math.PI,0); ctx.fill();
+  ctx.fillStyle='#4a3a28';
+  ctx.beginPath(); ctx.arc(s*0.5,s*0.32,s*0.2,Math.PI,0); ctx.fill();
+  // Crescent on dome tip
+  ctx.fillStyle='#ffd700'; ctx.font=`${s*0.22}px serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('☪',s*0.5,s*0.08);
+  // Columns
+  ctx.fillStyle='#6a5030';
+  ctx.fillRect(s*0.08,s*0.55,s*0.14,s*0.45);
+  ctx.fillRect(s*0.78,s*0.55,s*0.14,s*0.45);
+  // Arched window
+  ctx.fillStyle='#ffe070';
+  ctx.beginPath(); ctx.arc(s*0.5,s*0.65,s*0.18,Math.PI,0); ctx.fill();
+  ctx.fillRect(s*0.32,s*0.65,s*0.36,s*0.25);
+  ctx.fillStyle='#4a3a28';
+  ctx.beginPath(); ctx.arc(s*0.5,s*0.65,s*0.1,Math.PI,0); ctx.fill();
+  ctx.fillRect(s*0.4,s*0.65,s*0.2,s*0.15);
+}
+
+// Type 5 — Factory / industrial (charcoal, chimney, small windows, brick)
+function drawFactory(s) {
+  ctx.fillStyle='#2a2222'; ctx.fillRect(0,0,s,s);
+  // Chimney (tall, off-center)
+  ctx.fillStyle='#1a1212';
+  ctx.fillRect(s*0.62,0,s*0.2,s*0.55);
+  // Smoke wisps
+  ctx.fillStyle='rgba(150,140,130,0.3)';
+  ctx.beginPath(); ctx.arc(s*0.72,-s*0.04,s*0.09,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(s*0.68,-s*0.12,s*0.07,0,Math.PI*2); ctx.fill();
+  // Main building block
+  ctx.fillStyle='#3a2a2a'; ctx.fillRect(0,s*0.28,s*0.6,s*0.72);
+  // Brick lines
+  ctx.strokeStyle='#1a1212'; ctx.lineWidth=0.5;
+  [0.45,0.62,0.79].forEach(f=>{ctx.beginPath();ctx.moveTo(0,s*f);ctx.lineTo(s*0.6,s*f);ctx.stroke();});
+  // Windows
+  ctx.fillStyle='#ffe070';
+  ctx.fillRect(s*0.06,s*0.36,s*0.2,s*0.16);
+  ctx.fillRect(s*0.34,s*0.36,s*0.2,s*0.16);
+  ctx.fillRect(s*0.06,s*0.62,s*0.2,s*0.16);
+}
+
+// ═══════════════════════════════════════════════════
+//  TEHRAN HQ SPECIAL BUILDING (drawn over HQ cells)
+// ═══════════════════════════════════════════════════
+function drawHQBuilding() {
+  const x=8*CELL, y=7*CELL, w=5*CELL, h=4*CELL;
+  // Grand government building background
+  ctx.fillStyle='#1a0808'; ctx.fillRect(x,y,w,h);
+  // Facade
+  ctx.fillStyle='#2d1010'; ctx.fillRect(x+2,y+2,w-4,h-4);
+  // Roof crenellations
+  ctx.fillStyle='#3d1818';
+  for(let i=0;i<8;i++) ctx.fillRect(x+i*(w/8),y,w/8-2,h*0.06);
+  // Columns (evenly spaced)
+  ctx.fillStyle='#4a2020';
+  [0.12,0.28,0.44,0.60,0.76].forEach(f=>ctx.fillRect(x+w*f,y+h*0.12,w*0.06,h*0.78));
+  // Iranian flag colours stripe
+  ctx.fillStyle='#006600'; ctx.fillRect(x+4,y+h*0.2,w-8,h*0.06);
+  ctx.fillStyle='#ffffff'; ctx.fillRect(x+4,y+h*0.26,w-8,h*0.06);
+  ctx.fillStyle='#cc0000'; ctx.fillRect(x+4,y+h*0.32,w-8,h*0.06);
+  // Main door / gate
+  ctx.fillStyle='#0a0000';
+  ctx.beginPath(); ctx.arc(x+w*0.5,y+h*0.72,w*0.12,Math.PI,0); ctx.fill();
+  ctx.fillRect(x+w*0.38,y+h*0.72,w*0.24,h*0.26);
+  // Windows (arched, lit ominously red)
+  ctx.fillStyle='rgba(200,0,0,0.6)';
+  [[0.18,0.44],[0.38,0.44],[0.58,0.44],[0.78,0.44]].forEach(([fx,fy])=>{
+    ctx.beginPath(); ctx.arc(x+w*fx,y+h*fy,w*0.06,Math.PI,0); ctx.fill();
+    ctx.fillRect(x+w*fx-w*0.06,y+h*fy,w*0.12,h*0.14);
+  });
+  // Label
+  ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(9,CELL*0.38)}px Courier New`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('☪ TEHRAN HQ',x+w/2,y+h*0.14);
+  // Door gate lines (dashed red)
+  ctx.strokeStyle='#ff4444'; ctx.lineWidth=1.5; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(x+CELL,y+CELL); ctx.lineTo(x+4*CELL,y+CELL); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ═══════════════════════════════════════════════════
+//  TRAP DOOR DRAWING
+// ═══════════════════════════════════════════════════
+function drawTrapDoor() {
+  if (!trap) return;
+  const tx=trap.col*CELL, ty=trap.row*CELL, s=CELL;
+  const progress=trap.frame/trap.maxFrames; // 0→1
+
+  // Dark hole in the ground
+  ctx.fillStyle='#000';
+  ctx.fillRect(tx,ty,s,s);
+  // Hole ellipse
+  ctx.fillStyle='#111';
+  ctx.beginPath();
+  ctx.ellipse(tx+s/2,ty+s/2, s*0.38*Math.min(progress*2,1), s*0.22, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  if (trap.phase==='opening'||trap.phase==='closing') {
+    const openFrac = trap.phase==='opening' ? progress : 1-progress;
+    // Left door panel (slides left)
+    ctx.fillStyle='#8b4513';
+    ctx.fillRect(tx - openFrac*s*0.5, ty, s*0.5, s);
+    ctx.strokeStyle='#5c2a0a'; ctx.lineWidth=1.5;
+    ctx.strokeRect(tx - openFrac*s*0.5, ty, s*0.5, s);
+    // Right door panel (slides right)
+    ctx.fillStyle='#8b4513';
+    ctx.fillRect(tx+s*0.5 + openFrac*s*0.5, ty, s*0.5, s);
+    ctx.strokeStyle='#5c2a0a';
+    ctx.strokeRect(tx+s*0.5 + openFrac*s*0.5, ty, s*0.5, s);
+    // Hinge bolts
+    ctx.fillStyle='#ffd700';
+    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08, ty+s*0.25, s*0.05, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08, ty+s*0.75, s*0.05, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42, ty+s*0.25, s*0.05, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42, ty+s*0.75, s*0.05, 0, Math.PI*2); ctx.fill();
+  } else if (trap.phase==='open') {
+    // Just the open hole with glow
+    ctx.fillStyle='rgba(0,100,255,0.15)';
+    ctx.beginPath(); ctx.arc(tx+s/2,ty+s/2,s*0.4,0,Math.PI*2); ctx.fill();
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  DRAWING
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  DRAW
+// ═══════════════════════════════════════════════════
 function draw() {
-  ctx.fillStyle = '#000011';
-  ctx.fillRect(0, 0, C.width, C.height);
+  ctx.fillStyle='#000011'; ctx.fillRect(0,0,COLS*CELL,ROWS*CELL);
   drawMaze();
-  drawHQ();
+  drawHQBuilding();
   drawDots();
-  if (gameState !== 'dead') drawPlayer();
+  drawTrapDoor();
+  if(gameState!=='dead') drawPlayer();
   officials.forEach(drawOfficial);
   drawFloats();
   drawOverlay();
 }
 
 function drawMaze() {
-  for (let r = 0; r < ROWS; r++) {
-    for (let c2 = 0; c2 < COLS; c2++) {
-      if (maze[r][c2] !== WALL) continue;
-      const x = c2 * CELL, y = r * CELL;
-      ctx.fillStyle = '#003399'; ctx.fillRect(x, y, CELL, CELL);
-      ctx.fillStyle = '#0044cc'; ctx.fillRect(x+1, y+1, CELL-2, CELL-2);
-      ctx.fillStyle = '#002266'; ctx.fillRect(x+3, y+3, CELL-6, CELL-6);
+  for(let r=0;r<ROWS;r++) {
+    for(let c=0;c<COLS;c++) {
+      if(maze[r][c]!==WALL) continue;
+      // Skip HQ-area cells — drawn by drawHQBuilding
+      if(r>=7&&r<=10&&c>=8&&c<=12) continue;
+      drawBuilding(bType[r][c], c*CELL, r*CELL);
+    }
+  }
+  // Tunnel row subtle background
+  for(let c=0;c<COLS;c++) {
+    if(maze[9][c]===EMPTY&&(c<4||c>=COLS-2)) {
+      ctx.fillStyle='#001133'; ctx.fillRect(c*CELL,9*CELL,CELL,CELL);
     }
   }
 }
 
-function drawHQ() {
-  const x = 8 * CELL, y = 7 * CELL, w = 5 * CELL, h = 4 * CELL;
-  ctx.fillStyle = '#3a0000';
-  ctx.fillRect(x + CELL, y + CELL, 3 * CELL, 3 * CELL);
-
-  ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 2;
-  // left wall
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y+h); ctx.stroke();
-  // right wall
-  ctx.beginPath(); ctx.moveTo(x+w, y); ctx.lineTo(x+w, y+h); ctx.stroke();
-  // bottom
-  ctx.beginPath(); ctx.moveTo(x, y+h); ctx.lineTo(x+w, y+h); ctx.stroke();
-  // top-left of door
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x+CELL, y); ctx.stroke();
-  // top-right of door
-  ctx.beginPath(); ctx.moveTo(x+4*CELL, y); ctx.lineTo(x+w, y); ctx.stroke();
-  // door gap (dashed)
-  ctx.strokeStyle = '#ff6666'; ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(x+CELL, y+CELL); ctx.lineTo(x+4*CELL, y+CELL); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // label
-  ctx.fillStyle = '#ff4444'; ctx.font = 'bold 13px Courier New';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('☪ TEHRAN HQ', x + w/2, y + CELL*2.0);
-  ctx.font = '10px Courier New'; ctx.fillStyle = '#ff8888';
-  ctx.fillText('respawn zone', x + w/2, y + CELL*2.7);
-}
-
 function drawDots() {
-  ctx.textBaseline = 'middle';
-  for (let r = 0; r < ROWS; r++) {
-    for (let c2 = 0; c2 < COLS; c2++) {
-      const t = maze[r][c2];
-      const cx = c2 * CELL + CELL/2, cy = r * CELL + CELL/2;
-      if (t === DOT) {
-        // Hamantaschen triangle
-        const s = 7;
-        ctx.fillStyle = '#c8860a';
-        ctx.beginPath(); ctx.moveTo(cx, cy-s); ctx.lineTo(cx+s, cy+s); ctx.lineTo(cx-s, cy+s); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#8b1a00';
-        ctx.beginPath(); ctx.arc(cx, cy+2, 2, 0, Math.PI*2); ctx.fill();
-      } else if (t === MASK) {
-        const pulse = 1 + 0.15 * Math.sin(animFrame * 0.1);
-        ctx.font = `${18 * pulse}px serif`; ctx.textAlign = 'center';
-        ctx.fillText('🎭', cx, cy);
-      }
+  ctx.textBaseline='middle';
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
+    const t=maze[r][c];
+    const cx=c*CELL+CELL/2, cy=r*CELL+CELL/2;
+    if(t===DOT) {
+      // Hamantaschen triangle
+      const s=Math.max(5,CELL*0.24);
+      ctx.fillStyle='#c8860a';
+      ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx+s,cy+s); ctx.lineTo(cx-s,cy+s); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#8b1a00';
+      ctx.beginPath(); ctx.arc(cx,cy+s*0.35,s*0.3,0,Math.PI*2); ctx.fill();
+    } else if(t===MASK) {
+      const pulse=1+0.15*Math.sin(animFrame*0.1);
+      ctx.font=`${Math.max(14,CELL*0.55)*pulse}px serif`;
+      ctx.textAlign='center'; ctx.fillText('🎭',cx,cy);
     }
   }
 }
 
 function drawPlayer() {
-  const x = player.x, y = player.y, r = CELL/2 - 2;
-  ctx.save(); ctx.translate(x, y);
+  if (!player.visible && !player.pilotMode) return; // underground, not yet flying
+
+  const x=player.x, y=player.y, r=CELL/2-2;
+  ctx.save(); ctx.translate(x,y);
 
   if (player.pilotMode) {
-    // Fighter jet with pilot head popping out
-    // Body
-    ctx.fillStyle = '#3366dd';
-    ctx.beginPath(); ctx.ellipse(0, 0, r, r*0.55, 0, 0, Math.PI*2); ctx.fill();
+    // Fighter jet — emerges from trap door, zooms around Tehran
+    ctx.fillStyle='#2255cc';
+    ctx.beginPath(); ctx.ellipse(0,0,r,r*0.5,0,0,Math.PI*2); ctx.fill();
+    // Nose
+    ctx.fillStyle='#3366ee';
+    ctx.beginPath(); ctx.moveTo(r,0); ctx.lineTo(r*1.5,-r*0.15); ctx.lineTo(r*1.5,r*0.15); ctx.closePath(); ctx.fill();
     // Wings
-    ctx.fillStyle = '#5588ff';
-    ctx.beginPath(); ctx.moveTo(-3,2); ctx.lineTo(-r*1.4,r*0.5); ctx.lineTo(-r*0.8,0); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(3,2); ctx.lineTo(r*1.4,r*0.5); ctx.lineTo(r*0.8,0); ctx.closePath(); ctx.fill();
-    // Pilot head
-    ctx.font = `${r*0.9}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('👨', 0, -r*0.35);
-    // Helmet visor
-    ctx.fillStyle = 'rgba(100,160,255,0.5)';
-    ctx.beginPath(); ctx.ellipse(0, -r*0.5, r*0.38, r*0.25, 0, 0, Math.PI*2); ctx.fill();
-    // Pilot timer bar at bottom of canvas
+    ctx.fillStyle='#4477dd';
+    ctx.beginPath(); ctx.moveTo(-r*0.2,r*0.1); ctx.lineTo(-r*1.3,r*0.55); ctx.lineTo(-r*0.6,r*0.1); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-r*0.2,-r*0.1); ctx.lineTo(-r*1.3,-r*0.55); ctx.lineTo(-r*0.6,-r*0.1); ctx.closePath(); ctx.fill();
+    // Tail fins
+    ctx.fillStyle='#3366ee';
+    ctx.beginPath(); ctx.moveTo(-r,0); ctx.lineTo(-r*1.4,-r*0.4); ctx.lineTo(-r*0.7,0); ctx.closePath(); ctx.fill();
+    // Pilot head in cockpit
+    ctx.font=`${r*0.75}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👨',r*0.1,-r*0.3);
+    // Cockpit glass
+    ctx.fillStyle='rgba(100,180,255,0.4)';
+    ctx.beginPath(); ctx.ellipse(r*0.1,-r*0.3,r*0.32,r*0.26,0,0,Math.PI*2); ctx.fill();
+
     ctx.restore();
-    const frac = pilotTimer / PILOT_FRAMES;
-    ctx.fillStyle = pilotTimer < WARN_FRAMES
-      ? (animFrame % 20 < 10 ? '#ff4400' : '#ffaa00')
-      : '#4488ff';
-    ctx.fillRect(0, C.height - 4, frac * C.width, 4);
+
+    // Pilot timer bar at bottom
+    const frac=pilotTimer/PILOT_FRAMES;
+    const warn=pilotTimer<WARN_FRAMES&&animFrame%16<8;
+    ctx.fillStyle=warn?'#ff4400':'#3399ff';
+    ctx.fillRect(0,ROWS*CELL-4,frac*COLS*CELL,4);
     return;
   }
 
-  // Normal — pac-man style chomping circle
-  let angle = 0;
-  if (player.dir === RIGHT) angle = 0;
-  else if (player.dir === LEFT)  angle = Math.PI;
-  else if (player.dir === UP)    angle = -Math.PI/2;
-  else if (player.dir === DOWN)  angle =  Math.PI/2;
+  // Normal — Mossad operative (spy, pac-man style body)
+  let angle=0;
+  if(player.dir===RIGHT) angle=0;
+  else if(player.dir===LEFT)  angle=Math.PI;
+  else if(player.dir===UP)    angle=-Math.PI/2;
+  else if(player.dir===DOWN)  angle=Math.PI/2;
   ctx.rotate(angle);
-  ctx.fillStyle = '#FFD700';
+  ctx.fillStyle='#222222'; // dark spy outfit
   ctx.beginPath(); ctx.moveTo(0,0);
-  ctx.arc(0, 0, r, player.mouth * Math.PI, (2-player.mouth) * Math.PI);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(r*0.3, -r*0.38, r*0.13, 0, Math.PI*2); ctx.fill();
-
+  ctx.arc(0,0,r,player.mouth*Math.PI,(2-player.mouth)*Math.PI); ctx.closePath(); ctx.fill();
+  // Spy hat / beret
+  ctx.fillStyle='#003300';
+  ctx.beginPath(); ctx.arc(0,-r*0.4,r*0.55,Math.PI*1.1,Math.PI*1.9); ctx.closePath(); ctx.fill();
+  // Eye
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.18,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#00aa00'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.1,0,Math.PI*2); ctx.fill();
   ctx.restore();
 }
 
 function drawOfficial(o) {
-  const x = o.x, y = o.y, r = CELL/2 - 2;
-  ctx.save(); ctx.translate(x, y);
-
-  if (o.state === 'scared') {
-    drawForceGhost(o, r, pilotTimer < WARN_FRAMES && animFrame%20<10 ? 0.35 : 0.8, '#88ccff');
-  } else if (o.state === 'return') {
-    drawForceGhost(o, r, 0.3, '#ffffff');
+  const r=CELL/2-2;
+  ctx.save(); ctx.translate(o.x,o.y);
+  if(o.state==='scared') {
+    drawForceGhost(o,r, pilotTimer<WARN_FRAMES&&animFrame%20<10 ? 0.35:0.8, '#88ccff');
+  } else if(o.state==='return') {
+    drawForceGhost(o,r,0.3,'#ffffff');
   } else {
-    // Normal body — visible in HQ too (slightly dim)
-    if (o.state === 'hq') ctx.globalAlpha = 0.65;
-    // Circle body
-    ctx.fillStyle = o.color;
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
-    // Face emoji
-    ctx.font = `${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(o.face, 0, 0);
+    if(o.state==='hq') ctx.globalAlpha=0.65;
+    ctx.fillStyle=o.color;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    ctx.font=`${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(o.face,0,0);
   }
-
-  ctx.globalAlpha = 1;
-  ctx.restore();
+  ctx.globalAlpha=1; ctx.restore();
 }
 
-function drawForceGhost(o, r, alpha, tint) {
-  // Glowing aura
-  const pulse = 0.15 + 0.1 * Math.sin(animFrame * 0.12);
-  const g = ctx.createRadialGradient(0,0,r*0.3, 0,0,r*2.2);
-  g.addColorStop(0, `rgba(140,200,255,${pulse*2*alpha})`);
-  g.addColorStop(1, 'rgba(80,140,255,0)');
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = g;
+function drawForceGhost(o,r,alpha,tint) {
+  const pulse=0.15+0.1*Math.sin(animFrame*0.12);
+  const g=ctx.createRadialGradient(0,0,r*0.3,0,0,r*2.2);
+  g.addColorStop(0,`rgba(140,200,255,${pulse*2*alpha})`); g.addColorStop(1,'rgba(80,140,255,0)');
+  ctx.globalAlpha=1; ctx.fillStyle=g;
   ctx.beginPath(); ctx.arc(0,0,r*2.2,0,Math.PI*2); ctx.fill();
-
-  // Ghost body (their own color, translucent)
-  ctx.globalAlpha = (0.35 + 0.08*Math.sin(animFrame*0.18)) * alpha;
-  ctx.fillStyle = o.color;
+  ctx.globalAlpha=(0.35+0.08*Math.sin(animFrame*0.18))*alpha; ctx.fillStyle=o.color;
   ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
-
-  // Blue tint
-  ctx.globalAlpha = 0.25 * alpha;
-  ctx.fillStyle = tint;
+  ctx.globalAlpha=0.25*alpha; ctx.fillStyle=tint;
   ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
-
-  // Face, faded
-  ctx.globalAlpha = (0.55 + 0.1*Math.sin(animFrame*0.2)) * alpha;
-  ctx.font = `${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(o.face, 0, 0);
-
-  // Glow ring
-  ctx.globalAlpha = (0.4 + 0.2*Math.sin(animFrame*0.15)) * alpha;
-  ctx.strokeStyle = '#aaddff'; ctx.lineWidth = 1.5;
+  ctx.globalAlpha=(0.55+0.1*Math.sin(animFrame*0.2))*alpha;
+  ctx.font=`${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(o.face,0,0);
+  ctx.globalAlpha=(0.4+0.2*Math.sin(animFrame*0.15))*alpha;
+  ctx.strokeStyle='#aaddff'; ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.arc(0,0,r+1,0,Math.PI*2); ctx.stroke();
-
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha=1;
 }
 
 function drawFloats() {
-  ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const f of floats) {
-    ctx.globalAlpha = f.alpha;
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText(f.text, f.x, f.y);
+  ctx.font=`bold ${Math.max(12,CELL*0.42)}px Courier New`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const f of floats) {
+    ctx.globalAlpha=f.alpha; ctx.fillStyle='#FFD700'; ctx.fillText(f.text,f.x,f.y);
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha=1;
 }
 
 function drawOverlay() {
-  if (gameState === 'start') {
-    ctx.fillStyle = 'rgba(0,0,17,0.72)'; ctx.fillRect(0,0,C.width,C.height);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#8B00FF'; ctx.font = 'bold 22px Courier New';
-    ctx.fillText('🎭 TASCHEN-MAN 🥐', C.width/2, C.height/2 - 70);
-    ctx.fillStyle = '#fff'; ctx.font = '13px Courier New';
-    ctx.fillText('Eat all the Hamantaschen!', C.width/2, C.height/2 - 35);
-    ctx.fillText('Grab 🎭 to become a fighter pilot', C.width/2, C.height/2 - 10);
-    ctx.fillText('and hunt the Iranian officials!', C.width/2, C.height/2 + 12);
-    ctx.fillStyle = '#FFD700'; ctx.font = 'bold 13px Courier New';
-    ctx.fillText('Arrow keys / WASD  —  ENTER to start', C.width/2, C.height/2 + 50);
-    ctx.fillStyle = '#ff6666'; ctx.font = '11px Courier New';
-    ctx.fillText('🕊️ This Purim, the people fight back 🕊️', C.width/2, C.height/2 + 80);
+  const W=COLS*CELL, H=ROWS*CELL;
+  if(gameState==='start') {
+    ctx.fillStyle='rgba(0,0,17,0.72)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#8B00FF'; ctx.font=`bold ${Math.max(16,CELL*0.65)}px Courier New`;
+    ctx.fillText('🎭 TASCHEN-MAN',W/2,H/2-H*0.18);
+    ctx.fillStyle='#aaaaff'; ctx.font=`${Math.max(11,CELL*0.4)}px Courier New`;
+    ctx.fillText('You are a Mossad operative in Tehran.',W/2,H/2-H*0.09);
+    ctx.fillText('Follow the Hamantaschen left by the resistance.',W/2,H/2-H*0.04);
+    ctx.fillText('Grab 🎭 → trap door opens → pilot mode!',W/2,H/2+H*0.01);
+    ctx.fillStyle='#FFD700'; ctx.font=`bold ${Math.max(11,CELL*0.4)}px Courier New`;
+    ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H/2+H*0.10);
+    ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(10,CELL*0.35)}px Courier New`;
+    ctx.fillText('🕊️ This Purim, the people fight back 🕊️',W/2,H/2+H*0.17);
   }
-  if (gameState === 'gameover') {
-    ctx.fillStyle = 'rgba(0,0,17,0.82)'; ctx.fillRect(0,0,C.width,C.height);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ff3333'; ctx.font = 'bold 28px Courier New';
-    ctx.fillText('GAME OVER', C.width/2, C.height/2 - 20);
-    ctx.fillStyle = '#FFD700'; ctx.font = '16px Courier New';
-    ctx.fillText(`Final Score: ${score}`, C.width/2, C.height/2 + 20);
-    ctx.fillStyle = '#fff'; ctx.font = '13px Courier New';
-    ctx.fillText('ENTER to play again', C.width/2, C.height/2 + 55);
+  if(gameState==='gameover') {
+    ctx.fillStyle='rgba(0,0,17,0.82)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(20,CELL*0.82)}px Courier New`;
+    ctx.fillText('GAME OVER',W/2,H/2-H*0.08);
+    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(13,CELL*0.48)}px Courier New`;
+    ctx.fillText(`Final Score: ${score}`,W/2,H/2+H*0.04);
+    ctx.fillStyle='#fff'; ctx.font=`${Math.max(11,CELL*0.4)}px Courier New`;
+    ctx.fillText('ENTER to play again',W/2,H/2+H*0.13);
   }
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  LOOP
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function loop() {
-  if (gameState === 'playing') update();
+  if(gameState==='playing') update();
   draw();
   requestAnimationFrame(loop);
 }
