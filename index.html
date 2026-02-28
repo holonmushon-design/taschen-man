@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Taschen-Man 🎭</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000011;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Courier New', monospace;
+  user-select: none;
+}
+h1 { color: #8B00FF; font-size: 22px; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 12px #8B00FF; }
+#hud { display: flex; gap: 32px; color: #fff; font-size: 15px; font-weight: bold; margin-bottom: 6px; }
+canvas { display: block; border: 2px solid #003399; box-shadow: 0 0 20px #003399; }
+#msg { color: #FFD700; font-size: 14px; margin-top: 8px; height: 20px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>🎭 TASCHEN-MAN</h1>
+<div id="hud">
+  <span>SCORE: <span id="score">0</span></span>
+  <span>❤️ <span id="lives">3</span></span>
+  <span>LEVEL: <span id="level">1</span></span>
+</div>
+<canvas id="c"></canvas>
+<div id="msg">Press ENTER or SPACE to start</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const C   = document.getElementById('c');
+const ctx = C.getContext('2d');
+const CELL = 30;
+const COLS = 19;
+const ROWS = 21;
+C.width  = COLS * CELL;
+C.height = ROWS * CELL;
+
+const SPEED_PLAYER   = 2;
+const SPEED_OFFICIAL = 2;
+const SPEED_SCARED   = 1;
+const SPEED_RETURN   = 2;
+const PILOT_FRAMES   = 720;   // 12 s @ 60 fps
+const WARN_FRAMES    = 240;   // last 4 s → flash warning
+
+// Cell types
+const WALL = 1, DOT = 0, MASK = 2, EMPTY = 3, HQ = 4, DOOR = 5;
+
+const UP    = { dx:  0, dy: -1 };
+const DOWN  = { dx:  0, dy:  1 };
+const LEFT  = { dx: -1, dy:  0 };
+const RIGHT = { dx:  1, dy:  0 };
+const DIRS  = [UP, DOWN, LEFT, RIGHT];
+
+// ═══════════════════════════════════════════════════════
+//  MAZE  (19 cols × 21 rows)
+//  0=dot  1=wall  2=mask  3=empty  4=hq-inside  5=hq-door
+// ═══════════════════════════════════════════════════════
+const BASE = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 0
+  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1], // 1
+  [1,0,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,0,1], // 2
+  [1,2,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,2,1], // 3  ← masks top
+  [1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1], // 4
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // 5  ← open corridor
+  [1,0,1,1,0,1,1,0,1,0,0,0,1,0,1,1,0,0,1], // 6  above HQ
+  [1,0,1,1,0,1,1,0,1,5,5,5,1,0,1,1,0,0,1], // 7  ← HQ door (DOOR=5)
+  [1,0,0,0,0,0,0,0,1,4,4,4,1,0,0,0,0,0,1], // 8  HQ interior
+  [3,3,3,3,0,1,1,0,1,4,4,4,1,0,1,1,0,3,3], // 9  tunnel + HQ
+  [1,1,1,1,0,1,1,0,1,4,4,4,1,0,1,1,0,1,1], // 10 HQ interior
+  [1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1], // 11 below HQ
+  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], // 12
+  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], // 13
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // 14 ← open corridor
+  [1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1], // 15
+  [1,2,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,2,1], // 16 ← masks bottom
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1], // 17
+  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,0,1], // 18
+  [1,0,1,1,0,1,1,0,1,3,3,3,1,0,1,1,0,0,1], // 19 player spawn
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 20
+];
+
+// ═══════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════
+let maze, score, lives, level;
+let gameState; // 'start' | 'playing' | 'dead' | 'levelclear' | 'gameover'
+let dotsLeft, pilotTimer, multKill, animFrame;
+let player, officials;
+const floats = [];
+
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level');
+const msgEl   = document.getElementById('msg');
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+const ctr = (col, row) => ({ x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 });
+
+function cell(col, row) {
+  if (row < 0 || row >= ROWS) return WALL;
+  const c = ((col % COLS) + COLS) % COLS;
+  return maze[row][c];
+}
+function setCell(col, row, v) {
+  maze[row][((col % COLS) + COLS) % COLS] = v;
+}
+// Can this entity walk into (col,row)?
+// canHQ: true = HQ/door cells passable (used only for returning+exiting officials)
+function walkable(col, row, canHQ) {
+  const t = cell(col, row);
+  if (t === WALL)               return false;
+  if (t === HQ || t === DOOR)   return !!canHQ;
+  return true;
+}
+
+// Is entity pixel-position snapped to a cell center? (speed=2, cell=30 → half=15, centers at 15,45,75…)
+function atCenter(x, y) {
+  return x % CELL === CELL / 2 && y % CELL === CELL / 2;
+}
+const col = x => Math.floor(x / CELL);
+const row = y => Math.floor(y / CELL);
+
+function hud() {
+  scoreEl.textContent = score;
+  livesEl.textContent = lives;
+  levelEl.textContent = level;
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+function initGame() {
+  score = 0; lives = 3; level = 1;
+  hud();
+  initLevel();
+  gameState = 'start';
+  msgEl.textContent = 'Press ENTER or SPACE to start';
+}
+
+function initLevel() {
+  maze = BASE.map(r => [...r]);
+  dotsLeft  = 0;
+  maze.forEach(r => r.forEach(v => { if (v === DOT || v === MASK) dotsLeft++; }));
+  pilotTimer = 0; multKill = 0; animFrame = 0;
+  floats.length = 0;
+
+  // Player — bottom center
+  const ps = ctr(10, 19);
+  player = {
+    x: ps.x, y: ps.y,
+    dir: LEFT, nextDir: LEFT,
+    pilotMode: false,
+    mouth: 0.2, mouthDir: 1,
+  };
+
+  // Officials — start OUTSIDE HQ, spread around the maze
+  //   Each has a Pac-Man ghost personality:
+  //   0=Blinky(direct), 1=Pinky(ambush), 2=Inky(flank), 3=Clyde(shy)
+  const starts = [
+    { col: 4,  row: 1,  dir: RIGHT, color: '#dd2200', face: '😠' }, // Blinky top-left
+    { col: 14, row: 1,  dir: LEFT,  color: '#dd6600', face: '😡' }, // Pinky  top-right
+    { col: 1,  row: 14, dir: RIGHT, color: '#007755', face: '🤬' }, // Inky   left-mid
+    { col: 17, row: 14, dir: LEFT,  color: '#660077', face: '😤' }, // Clyde  right-mid
+  ];
+
+  officials = starts.map((s, i) => {
+    const p = ctr(s.col, s.row);
+    return {
+      x: p.x, y: p.y,
+      dir: s.dir,
+      state: 'chase',   // 'chase' | 'scared' | 'dead' | 'return' | 'hq'
+      pers: i,
+      eatDelay: 0,
+      releaseTimer: 0,
+      color: s.color,
+      face: s.face,
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.code === 'Enter' || e.code === 'Space') {
+    if (gameState === 'start' || gameState === 'dead') {
+      if (gameState === 'dead') initLevel();
+      gameState = 'playing'; msgEl.textContent = ''; return;
+    }
+    if (gameState === 'levelclear') {
+      level++; levelEl.textContent = level; initLevel();
+      gameState = 'playing'; msgEl.textContent = ''; return;
+    }
+    if (gameState === 'gameover') { initGame(); gameState = 'start'; return; }
+  }
+  if (gameState !== 'playing') return;
+  if (e.code === 'ArrowLeft'  || e.code === 'KeyA') player.nextDir = LEFT;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') player.nextDir = RIGHT;
+  if (e.code === 'ArrowUp'    || e.code === 'KeyW') player.nextDir = UP;
+  if (e.code === 'ArrowDown'  || e.code === 'KeyS') player.nextDir = DOWN;
+});
+
+// ═══════════════════════════════════════════════════════
+//  PLAYER MOVEMENT
+// ═══════════════════════════════════════════════════════
+function movePlayer() {
+  // At cell center: try to turn
+  if (atCenter(player.x, player.y)) {
+    const c = col(player.x), r = row(player.y);
+    if (walkable(c + player.nextDir.dx, r + player.nextDir.dy, false))
+      player.dir = player.nextDir;
+    if (!walkable(c + player.dir.dx, r + player.dir.dy, false))
+      return; // blocked — stay put
+  }
+  player.x += player.dir.dx * SPEED_PLAYER;
+  player.y += player.dir.dy * SPEED_PLAYER;
+  // tunnel wrap
+  if (player.x < 0)            player.x += COLS * CELL;
+  if (player.x >= COLS * CELL) player.x -= COLS * CELL;
+}
+
+function collectDot() {
+  if (!atCenter(player.x, player.y)) return;
+  const c = col(player.x), r = row(player.y);
+  const t = cell(c, r);
+
+  if (t === DOT) {
+    setCell(c, r, EMPTY); score += 10; dotsLeft--; hud();
+    if (dotsLeft <= 0) { gameState = 'levelclear'; msgEl.textContent = `🎉 Level ${level} done! ENTER to continue`; }
+
+  } else if (t === MASK) {
+    setCell(c, r, EMPTY); score += 50; dotsLeft--; hud();
+    if (dotsLeft <= 0) { gameState = 'levelclear'; msgEl.textContent = `🎉 Level ${level} done! ENTER to continue`; return; }
+    pilotTimer = PILOT_FRAMES;
+    player.pilotMode = true;
+    multKill = 0;
+    // All outside officials go scared and IMMEDIATELY reverse direction
+    officials.forEach(o => {
+      if (o.state === 'chase') {
+        o.state = 'scared';
+        o.eatDelay = 60;
+        o.dir = { dx: -o.dir.dx, dy: -o.dir.dy }; // reverse
+      }
+    });
+    msgEl.textContent = '✈️ PILOT MODE! Hunt them down!';
+    setTimeout(() => { if (gameState === 'playing') msgEl.textContent = ''; }, 2000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  OFFICIAL MOVEMENT & AI
+// ═══════════════════════════════════════════════════════
+function chaseTarget(o) {
+  // Pac-Man ghost AI per personality
+  const pc = col(player.x), pr = row(player.y);
+  const pdx = player.dir.dx, pdy = player.dir.dy;
+
+  if (o.pers === 0) { // Blinky — direct chase
+    return { c: pc, r: pr };
+  }
+  if (o.pers === 1) { // Pinky — 4 tiles ahead of player
+    return { c: pc + pdx * 4, r: pr + pdy * 4 };
+  }
+  if (o.pers === 2) { // Inky — flank via Blinky
+    const b = officials[0];
+    const bc = col(b.x), br = row(b.y);
+    const ac = pc + pdx * 2, ar = pr + pdy * 2;
+    return { c: ac * 2 - bc, r: ar * 2 - br };
+  }
+  if (o.pers === 3) { // Clyde — chase if far, scatter if close
+    const d = Math.abs(col(o.x) - pc) + Math.abs(row(o.y) - pr);
+    return d > 8 ? { c: pc, r: pr } : { c: 1, r: 17 };
+  }
+  return { c: pc, r: pr };
+}
+
+function pickDir(o, targetC, targetR, isHQ, maximize) {
+  const oc = col(o.x), or_ = row(o.y);
+  const best = DIRS
+    .filter(d => {
+      const nc = oc + d.dx, nr = or_ + d.dy;
+      // never reverse (unless no other option)
+      if (d.dx === -o.dir.dx && d.dy === -o.dir.dy) return false;
+      return walkable(nc, nr, isHQ);
+    })
+    .map(d => {
+      const nc = ((oc + d.dx) % COLS + COLS) % COLS;
+      const nr = or_ + d.dy;
+      const dist = Math.abs(nc - targetC) + Math.abs(nr - targetR);
+      return { d, dist };
+    })
+    .sort((a, b) => maximize ? b.dist - a.dist : a.dist - b.dist);
+
+  if (best.length > 0) {
+    o.dir = best[0].d;
+  } else {
+    // stuck — allow reversal
+    const rev = DIRS.find(d => walkable(oc + d.dx, or_ + d.dy, isHQ));
+    if (rev) o.dir = rev;
+  }
+}
+
+function moveOfficial(o) {
+  const oc = col(o.x), or_ = row(o.y);
+
+  // At cell center — choose next direction based on state
+  if (atCenter(o.x, o.y)) {
+
+    if (o.state === 'chase') {
+      const t = chaseTarget(o);
+      pickDir(o, t.c, t.r, false, false); // chase = minimize dist, no HQ
+
+    } else if (o.state === 'scared') {
+      // Random direction (authentic Pac-Man frightened behavior)
+      const valid = DIRS.filter(d => {
+        if (d.dx === -o.dir.dx && d.dy === -o.dir.dy) return false;
+        return walkable(oc + d.dx, or_ + d.dy, false);
+      });
+      if (valid.length > 0) o.dir = valid[Math.floor(Math.random() * valid.length)];
+
+    } else if (o.state === 'return') {
+      // Returning to HQ: navigate to just above door, then drop in
+      if (or_ <= 7 && oc >= 9 && oc <= 11) {
+        pickDir(o, oc, 9, true, false); // drop straight down through door
+      } else {
+        pickDir(o, 10, 6, true, false); // navigate to above door
+      }
+      // Arrived inside HQ?
+      if (cell(oc, or_) === HQ) {
+        const p = ctr(10, 9);
+        o.x = p.x; o.y = p.y;
+        o.state = 'hq'; o.releaseTimer = 180; o.dir = DOWN;
+        return;
+      }
+
+    } else if (o.state === 'hq') {
+      // Bounce inside HQ until release timer
+      if (!player.pilotMode) o.releaseTimer--;
+      if (o.releaseTimer <= 0) {
+        o.state = 'exit'; o.dir = UP;
+      } else {
+        // small bounce inside HQ
+        const valid = DIRS.filter(d => walkable(oc + d.dx, or_ + d.dy, true));
+        if (valid.length) o.dir = valid[Math.floor(Math.random() * valid.length)];
+      }
+
+    } else if (o.state === 'exit') {
+      pickDir(o, 10, 6, true, false);
+      if (oc === 10 && or_ <= 6) o.state = 'chase';
+    }
+  }
+
+  // Move
+  const spd = o.state === 'scared' ? SPEED_SCARED
+            : o.state === 'return' ? SPEED_RETURN
+            : SPEED_OFFICIAL;
+
+  const nx = o.x + o.dir.dx * spd;
+  const ny = o.y + o.dir.dy * spd;
+  const nc = col(nx), nr = row(ny);
+  const canHQ = o.state === 'return' || o.state === 'hq' || o.state === 'exit';
+
+  // Only move if destination cell is walkable for this state
+  if (walkable(nc, nr, canHQ)) {
+    o.x = nx; o.y = ny;
+  } else {
+    // Hit wall — snap to current cell center and stop so next frame we re-pick direction
+    o.x = oc * CELL + CELL / 2;
+    o.y = or_ * CELL + CELL / 2;
+  }
+
+  // Tunnel wrap
+  if (o.x < 0)            o.x += COLS * CELL;
+  if (o.x >= COLS * CELL) o.x -= COLS * CELL;
+
+  // Safety: if somehow escaped bounds, reset to HQ
+  if (o.y < -CELL * 2 || o.y > (ROWS + 2) * CELL) {
+    const p = ctr(10, 9);
+    o.x = p.x; o.y = p.y;
+    o.state = 'hq'; o.releaseTimer = 120; o.dir = DOWN;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  COLLISIONS
+// ═══════════════════════════════════════════════════════
+function checkCollisions() {
+  for (const o of officials) {
+    if (o.state === 'return' || o.state === 'hq') continue;
+    const dx = player.x - o.x, dy = player.y - o.y;
+    if (Math.sqrt(dx * dx + dy * dy) > CELL * 0.65) continue;
+
+    if (player.pilotMode && o.state === 'scared' && o.eatDelay <= 0) {
+      multKill++;
+      const pts = 200 * (1 << (multKill - 1));
+      score += pts; hud();
+      floats.push({ text: `+${pts}`, x: o.x, y: o.y, alpha: 1 });
+      o.state = 'return'; o.dir = UP;
+
+    } else if (!player.pilotMode && o.state === 'chase') {
+      lives--; hud();
+      if (lives <= 0) {
+        gameState = 'gameover';
+        msgEl.textContent = 'GAME OVER — ENTER to restart';
+      } else {
+        gameState = 'dead';
+        msgEl.textContent = `💀 Caught! ${lives} lives left — ENTER to continue`;
+      }
+      return;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  UPDATE
+// ═══════════════════════════════════════════════════════
+function update() {
+  animFrame++;
+
+  // Pilot timer
+  if (pilotTimer > 0) {
+    pilotTimer--;
+    if (pilotTimer === 0) {
+      player.pilotMode = false;
+      officials.forEach(o => { if (o.state === 'scared') o.state = 'chase'; });
+      msgEl.textContent = '⚠️ Back to normal!';
+      setTimeout(() => { if (gameState === 'playing') msgEl.textContent = ''; }, 1500);
+    }
+  }
+
+  // Mouth
+  player.mouth += 0.06 * player.mouthDir;
+  if (player.mouth > 0.38) player.mouthDir = -1;
+  if (player.mouth < 0.02) player.mouthDir =  1;
+
+  movePlayer();
+  collectDot();
+
+  officials.forEach(o => {
+    if (o.eatDelay > 0) o.eatDelay--;
+    moveOfficial(o);
+  });
+
+  checkCollisions();
+
+  // Floats
+  for (let i = floats.length - 1; i >= 0; i--) {
+    floats[i].y -= 1; floats[i].alpha -= 0.02;
+    if (floats[i].alpha <= 0) floats.splice(i, 1);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAWING
+// ═══════════════════════════════════════════════════════
+function draw() {
+  ctx.fillStyle = '#000011';
+  ctx.fillRect(0, 0, C.width, C.height);
+  drawMaze();
+  drawHQ();
+  drawDots();
+  if (gameState !== 'dead') drawPlayer();
+  officials.forEach(drawOfficial);
+  drawFloats();
+  drawOverlay();
+}
+
+function drawMaze() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c2 = 0; c2 < COLS; c2++) {
+      if (maze[r][c2] !== WALL) continue;
+      const x = c2 * CELL, y = r * CELL;
+      ctx.fillStyle = '#003399'; ctx.fillRect(x, y, CELL, CELL);
+      ctx.fillStyle = '#0044cc'; ctx.fillRect(x+1, y+1, CELL-2, CELL-2);
+      ctx.fillStyle = '#002266'; ctx.fillRect(x+3, y+3, CELL-6, CELL-6);
+    }
+  }
+}
+
+function drawHQ() {
+  const x = 8 * CELL, y = 7 * CELL, w = 5 * CELL, h = 4 * CELL;
+  ctx.fillStyle = '#3a0000';
+  ctx.fillRect(x + CELL, y + CELL, 3 * CELL, 3 * CELL);
+
+  ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 2;
+  // left wall
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y+h); ctx.stroke();
+  // right wall
+  ctx.beginPath(); ctx.moveTo(x+w, y); ctx.lineTo(x+w, y+h); ctx.stroke();
+  // bottom
+  ctx.beginPath(); ctx.moveTo(x, y+h); ctx.lineTo(x+w, y+h); ctx.stroke();
+  // top-left of door
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x+CELL, y); ctx.stroke();
+  // top-right of door
+  ctx.beginPath(); ctx.moveTo(x+4*CELL, y); ctx.lineTo(x+w, y); ctx.stroke();
+  // door gap (dashed)
+  ctx.strokeStyle = '#ff6666'; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(x+CELL, y+CELL); ctx.lineTo(x+4*CELL, y+CELL); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // label
+  ctx.fillStyle = '#ff4444'; ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('☪ TEHRAN HQ', x + w/2, y + CELL*2.0);
+  ctx.font = '10px Courier New'; ctx.fillStyle = '#ff8888';
+  ctx.fillText('respawn zone', x + w/2, y + CELL*2.7);
+}
+
+function drawDots() {
+  ctx.textBaseline = 'middle';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c2 = 0; c2 < COLS; c2++) {
+      const t = maze[r][c2];
+      const cx = c2 * CELL + CELL/2, cy = r * CELL + CELL/2;
+      if (t === DOT) {
+        // Hamantaschen triangle
+        const s = 7;
+        ctx.fillStyle = '#c8860a';
+        ctx.beginPath(); ctx.moveTo(cx, cy-s); ctx.lineTo(cx+s, cy+s); ctx.lineTo(cx-s, cy+s); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#8b1a00';
+        ctx.beginPath(); ctx.arc(cx, cy+2, 2, 0, Math.PI*2); ctx.fill();
+      } else if (t === MASK) {
+        const pulse = 1 + 0.15 * Math.sin(animFrame * 0.1);
+        ctx.font = `${18 * pulse}px serif`; ctx.textAlign = 'center';
+        ctx.fillText('🎭', cx, cy);
+      }
+    }
+  }
+}
+
+function drawPlayer() {
+  const x = player.x, y = player.y, r = CELL/2 - 2;
+  ctx.save(); ctx.translate(x, y);
+
+  if (player.pilotMode) {
+    // Fighter jet with pilot head popping out
+    // Body
+    ctx.fillStyle = '#3366dd';
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r*0.55, 0, 0, Math.PI*2); ctx.fill();
+    // Wings
+    ctx.fillStyle = '#5588ff';
+    ctx.beginPath(); ctx.moveTo(-3,2); ctx.lineTo(-r*1.4,r*0.5); ctx.lineTo(-r*0.8,0); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(3,2); ctx.lineTo(r*1.4,r*0.5); ctx.lineTo(r*0.8,0); ctx.closePath(); ctx.fill();
+    // Pilot head
+    ctx.font = `${r*0.9}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👨', 0, -r*0.35);
+    // Helmet visor
+    ctx.fillStyle = 'rgba(100,160,255,0.5)';
+    ctx.beginPath(); ctx.ellipse(0, -r*0.5, r*0.38, r*0.25, 0, 0, Math.PI*2); ctx.fill();
+    // Pilot timer bar at bottom of canvas
+    ctx.restore();
+    const frac = pilotTimer / PILOT_FRAMES;
+    ctx.fillStyle = pilotTimer < WARN_FRAMES
+      ? (animFrame % 20 < 10 ? '#ff4400' : '#ffaa00')
+      : '#4488ff';
+    ctx.fillRect(0, C.height - 4, frac * C.width, 4);
+    return;
+  }
+
+  // Normal — pac-man style chomping circle
+  let angle = 0;
+  if (player.dir === RIGHT) angle = 0;
+  else if (player.dir === LEFT)  angle = Math.PI;
+  else if (player.dir === UP)    angle = -Math.PI/2;
+  else if (player.dir === DOWN)  angle =  Math.PI/2;
+  ctx.rotate(angle);
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath(); ctx.moveTo(0,0);
+  ctx.arc(0, 0, r, player.mouth * Math.PI, (2-player.mouth) * Math.PI);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(r*0.3, -r*0.38, r*0.13, 0, Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawOfficial(o) {
+  const x = o.x, y = o.y, r = CELL/2 - 2;
+  ctx.save(); ctx.translate(x, y);
+
+  if (o.state === 'scared') {
+    drawForceGhost(o, r, pilotTimer < WARN_FRAMES && animFrame%20<10 ? 0.35 : 0.8, '#88ccff');
+  } else if (o.state === 'return') {
+    drawForceGhost(o, r, 0.3, '#ffffff');
+  } else {
+    // Normal body — visible in HQ too (slightly dim)
+    if (o.state === 'hq') ctx.globalAlpha = 0.65;
+    // Circle body
+    ctx.fillStyle = o.color;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+    // Face emoji
+    ctx.font = `${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(o.face, 0, 0);
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawForceGhost(o, r, alpha, tint) {
+  // Glowing aura
+  const pulse = 0.15 + 0.1 * Math.sin(animFrame * 0.12);
+  const g = ctx.createRadialGradient(0,0,r*0.3, 0,0,r*2.2);
+  g.addColorStop(0, `rgba(140,200,255,${pulse*2*alpha})`);
+  g.addColorStop(1, 'rgba(80,140,255,0)');
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0,0,r*2.2,0,Math.PI*2); ctx.fill();
+
+  // Ghost body (their own color, translucent)
+  ctx.globalAlpha = (0.35 + 0.08*Math.sin(animFrame*0.18)) * alpha;
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+
+  // Blue tint
+  ctx.globalAlpha = 0.25 * alpha;
+  ctx.fillStyle = tint;
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+
+  // Face, faded
+  ctx.globalAlpha = (0.55 + 0.1*Math.sin(animFrame*0.2)) * alpha;
+  ctx.font = `${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(o.face, 0, 0);
+
+  // Glow ring
+  ctx.globalAlpha = (0.4 + 0.2*Math.sin(animFrame*0.15)) * alpha;
+  ctx.strokeStyle = '#aaddff'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0,0,r+1,0,Math.PI*2); ctx.stroke();
+
+  ctx.globalAlpha = 1;
+}
+
+function drawFloats() {
+  ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const f of floats) {
+    ctx.globalAlpha = f.alpha;
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawOverlay() {
+  if (gameState === 'start') {
+    ctx.fillStyle = 'rgba(0,0,17,0.72)'; ctx.fillRect(0,0,C.width,C.height);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#8B00FF'; ctx.font = 'bold 22px Courier New';
+    ctx.fillText('🎭 TASCHEN-MAN 🥐', C.width/2, C.height/2 - 70);
+    ctx.fillStyle = '#fff'; ctx.font = '13px Courier New';
+    ctx.fillText('Eat all the Hamantaschen!', C.width/2, C.height/2 - 35);
+    ctx.fillText('Grab 🎭 to become a fighter pilot', C.width/2, C.height/2 - 10);
+    ctx.fillText('and hunt the Iranian officials!', C.width/2, C.height/2 + 12);
+    ctx.fillStyle = '#FFD700'; ctx.font = 'bold 13px Courier New';
+    ctx.fillText('Arrow keys / WASD  —  ENTER to start', C.width/2, C.height/2 + 50);
+    ctx.fillStyle = '#ff6666'; ctx.font = '11px Courier New';
+    ctx.fillText('🕊️ This Purim, the people fight back 🕊️', C.width/2, C.height/2 + 80);
+  }
+  if (gameState === 'gameover') {
+    ctx.fillStyle = 'rgba(0,0,17,0.82)'; ctx.fillRect(0,0,C.width,C.height);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff3333'; ctx.font = 'bold 28px Courier New';
+    ctx.fillText('GAME OVER', C.width/2, C.height/2 - 20);
+    ctx.fillStyle = '#FFD700'; ctx.font = '16px Courier New';
+    ctx.fillText(`Final Score: ${score}`, C.width/2, C.height/2 + 20);
+    ctx.fillStyle = '#fff'; ctx.font = '13px Courier New';
+    ctx.fillText('ENTER to play again', C.width/2, C.height/2 + 55);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  LOOP
+// ═══════════════════════════════════════════════════════
+function loop() {
+  if (gameState === 'playing') update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+initGame();
+loop();
+</script>
+</body>
+</html>
