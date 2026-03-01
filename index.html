@@ -33,6 +33,78 @@ body {
 #title { color: #8B00FF; font-size: 13px; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 12px #8B00FF; }
 canvas { display: block; image-rendering: pixelated; }
 #msg { color: #FFD700; font-size: 16px; font-family: 'VT323', monospace; margin-top: 5px; height: 20px; text-align: center; letter-spacing: 1px; }
+
+#game-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+#comic-panel {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  width: 220px;
+  position: absolute;
+  right: calc(100% + 18px);
+  bottom: 0;
+  transition: opacity 0.35s ease;
+  opacity: 0;
+  pointer-events: none;
+}
+#comic-panel.visible { opacity: 1; }
+
+#comic-frame {
+  width: 220px;
+  height: 220px;
+  border: 3px solid #ffd700;
+  border-radius: 10px;
+  background: #0a0a1a;
+  overflow: hidden;
+  box-shadow: 0 0 18px rgba(255,215,0,0.35), 0 4px 12px rgba(0,0,0,0.7);
+  image-rendering: pixelated;
+}
+#comic-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+
+#comic-balloon {
+  position: relative;
+  background: #fffde7;
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-top: 14px;
+  width: 220px;
+  min-height: 60px;
+  font-family: 'VT323', monospace;
+  font-size: 19px;
+  color: #1a1a1a;
+  line-height: 1.25;
+  text-align: center;
+  box-shadow: 2px 2px 0 #333;
+}
+#comic-balloon::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-bottom-color: #333;
+}
+#comic-balloon::after {
+  content: '';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: #fffde7;
+}
 </style>
 </head>
 <body>
@@ -43,7 +115,13 @@ canvas { display: block; image-rendering: pixelated; }
   <span>LEVEL: <span id="level">1</span></span>
   <button id="sound-btn" onclick="toggleSound()">🔊 ON</button>
 </div>
-<canvas id="c"></canvas>
+<div id="game-wrap">
+  <div id="comic-panel">
+    <div id="comic-frame"><img id="comic-img" src="" alt=""></div>
+    <div id="comic-balloon" id="comic-text">…</div>
+  </div>
+  <canvas id="c"></canvas>
+</div>
 <div id="msg">Loading assets…</div>
 <audio id="bgm" src="assets/Desert_Caravan_Uprising.mp3" loop preload="auto"></audio>
 
@@ -156,6 +234,14 @@ const SPRITE_DEFS = [
   ['collectibles',          'assets/collectibles/collectibles',        10],
   ['compound',              'assets/hq/compound',                      1],
   ['tiles',                 'assets/tiles/street_tiles',               6],
+  ['portrait_ayatollah_chase',  'assets/portraits/ayatollah_chase',    1],
+  ['portrait_ayatollah_scared', 'assets/portraits/ayatollah_scared',   1],
+  ['portrait_guard_chase',      'assets/portraits/guard_chase',        1],
+  ['portrait_guard_scared',     'assets/portraits/guard_scared',       1],
+  ['portrait_basij_chase',      'assets/portraits/basij_chase',        1],
+  ['portrait_basij_scared',     'assets/portraits/basij_scared',       1],
+  ['portrait_female_chase',     'assets/portraits/female_chase',       1],
+  ['portrait_female_scared',    'assets/portraits/female_scared',      1],
 ];
 
 function loadSprites() {
@@ -266,6 +352,34 @@ const floats = [];
 let trap = null;
 let musicStarted = false;
 
+// ── Comic panel ─────────────────────────────────────
+let comicPanel = null; // { charIdx, timer, alpha }
+const COMIC_SHOW = 60*7;  // 7 seconds
+const COMIC_GAP  = 60*20; // 20s between appearances
+let comicCooldown = 60*4; // short delay before first popup
+let comicNextChar = 0;    // cycle through characters in order
+
+const COMIC_PHRASES = {
+  ayatollah: {
+    chase:  ["Death to the Zionist agent!","You cannot hide from Allah's will!","The revolution will find you!","I have been waiting for this moment...","Surrender and we may be merciful. Maybe."],
+    scared: ["WAIT— what is that noise?!","GUARDS! GUARDS!!","This was NOT in the prophecy!","My turban!! MY TURBAN!!","MAMA!!!"],
+  },
+  guard: {
+    chase:  ["Halt! By order of the IRGC!","I get a promotion for catching you!","My commander is watching — don't embarrass me.","I had you in my sights... almost...","You are making my shift very difficult."],
+    scared: ["ABORT ABORT ABORT!!","Nobody told me about a JET!","I did NOT sign up for this!","My rifle is jammed and I am RUNNING!","RETREAT! Strategic retreat!!"],
+  },
+  basij: {
+    chase:  ["VROOM VROOM — you cannot outrun my motorcycle!","The streets belong to the Basij!","I have chased better spies than you!","My motorcycle never fails me!","You think you can escape Tehran traffic?!"],
+    scared: ["THE BIKE WON'T START!!","EVERY MAN FOR HIMSELF!","Why is there a JET in the BAZAAR?!","I dropped my keys I dropped my KEYS!!","VROOM vr... vr... oh no—"],
+  },
+  female: {
+    chase:  ["You violated the moral code!!","I will report you to the morality police!","Stop right there, IMPERIALIST!","My committee will hear about this!","The sisterhood of the revolution is watching!"],
+    scared: ["HARAM! This is COMPLETELY HARAM!","Someone call my husband!!","MY CHADOR!! IT'S FLYING OFF!!","This is NOT what I volunteered for!","AIIIEEEE!!!"],
+  },
+};
+
+const CHAR_KEYS = ['ayatollah','guard','basij','female'];
+
 // ═══════════════════════════════════════════════════
 //  HELPERS
 // ═══════════════════════════════════════════════════
@@ -321,6 +435,7 @@ function initLevel() {
   dotsLeft=0;
   maze.forEach(r=>r.forEach(v=>{if(v===DOT||v===MASK)dotsLeft++;}));
   pilotTimer=0; multKill=0; animFrame=0; floats.length=0; trap=null;
+  comicPanel=null; comicCooldown=60*5;
 
   const ps=ctr(10,18);
   player={
@@ -585,6 +700,52 @@ function update() {
   officials.forEach(o=>{ if(o.eatDelay>0)o.eatDelay--; moveOfficial(o); });
   checkCollisions();
   for(let i=floats.length-1;i>=0;i--){floats[i].y-=1;floats[i].alpha-=0.02;if(floats[i].alpha<=0)floats.splice(i,1);}
+
+  // ── Comic panel lifecycle ──────────────────────────
+  if (comicPanel) {
+    comicPanel.timer--;
+    const fadeFrames = 30;
+    if (comicPanel.timer <= 0) {
+      comicPanel = null;
+      comicCooldown = COMIC_GAP;
+    } else if (comicPanel.timer < fadeFrames) {
+      comicPanel.alpha = comicPanel.timer / fadeFrames;
+    } else if (comicPanel.timer > COMIC_SHOW - fadeFrames) {
+      comicPanel.alpha = (COMIC_SHOW - comicPanel.timer) / fadeFrames;
+    } else {
+      comicPanel.alpha = 1;
+    }
+    // Update mood + phrase live if state changed
+    if (comicPanel) {
+      const o = officials[comicPanel.charIdx];
+      const liveMood = (o && o.state==='scared') ? 'scared' : 'chase';
+      if (liveMood !== comicPanel.mood) {
+        comicPanel.mood = liveMood;
+        const phrases = COMIC_PHRASES[comicPanel.key][liveMood];
+        comicPanel.phrase = phrases[Math.floor(Math.random()*phrases.length)];
+      }
+    }
+  } else {
+    if (comicCooldown > 0) { comicCooldown--; }
+    else {
+      // Cycle through characters in order; skip if in HQ
+      let picked = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const i = (comicNextChar + attempt) % 4;
+        const o = officials[i];
+        if (o && o.state!=='return' && o.state!=='hq') { picked = i; break; }
+      }
+      if (picked !== null) {
+        comicNextChar = (picked + 1) % 4;
+        const o = officials[picked];
+        const key    = CHAR_KEYS[o.pers];
+        const mood   = (o.state==='scared') ? 'scared' : 'chase';
+        const phrases = COMIC_PHRASES[key][mood];
+        const phrase  = phrases[Math.floor(Math.random()*phrases.length)];
+        comicPanel = { charIdx: picked, mood, key, phrase, timer: COMIC_SHOW, alpha: 0 };
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -855,6 +1016,24 @@ function drawHQBuilding() {
 // ═══════════════════════════════════════════════════
 //  DRAW — FLOATING SCORES + OVERLAY
 // ═══════════════════════════════════════════════════
+const comicPanelEl  = document.getElementById('comic-panel');
+const comicImgEl    = document.getElementById('comic-img');
+const comicBalloon  = document.getElementById('comic-balloon');
+
+function updateComicPanel() {
+  if (!comicPanel) {
+    comicPanelEl.style.display = 'none';
+    return;
+  }
+  comicPanelEl.style.display = 'flex';
+  comicPanelEl.style.opacity = comicPanel.alpha;
+
+  const imgKey = `portrait_${comicPanel.key}_${comicPanel.mood}`;
+  const img = SP[imgKey] && SP[imgKey][0];
+  if (img && comicImgEl.src !== img.src) comicImgEl.src = img.src;
+  comicBalloon.textContent = comicPanel.phrase;
+}
+
 function drawFloats() {
   ctx.font=`bold ${Math.max(16,CELL*0.55)}px 'Press Start 2P'`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -933,6 +1112,7 @@ function draw() {
   if(gameState!=='dead') drawPlayer();
   officials.forEach(drawOfficial);
   drawFloats();
+  updateComicPanel();
   drawOverlay();
 }
 
