@@ -43,10 +43,11 @@ canvas { display: block; image-rendering: pixelated; }
   display: none;
   flex-direction: column;
   align-items: center;
-  width: 220px;
+  width: 260px;
   position: absolute;
-  right: calc(100% + 18px);
-  bottom: 0;
+  right: calc(100% + 20px);
+  top: 50%;
+  transform: translateY(-50%);
   transition: opacity 0.35s ease;
   opacity: 0;
   pointer-events: none;
@@ -54,8 +55,8 @@ canvas { display: block; image-rendering: pixelated; }
 #comic-panel.visible { opacity: 1; }
 
 #comic-frame {
-  width: 220px;
-  height: 220px;
+  width: 260px;
+  height: 260px;
   border: 3px solid #ffd700;
   border-radius: 10px;
   background: #0a0a1a;
@@ -78,10 +79,10 @@ canvas { display: block; image-rendering: pixelated; }
   border-radius: 12px;
   padding: 10px 14px;
   margin-top: 14px;
-  width: 220px;
+  width: 260px;
   min-height: 60px;
   font-family: 'VT323', monospace;
-  font-size: 19px;
+  font-size: 21px;
   color: #1a1a1a;
   line-height: 1.25;
   text-align: center;
@@ -550,6 +551,10 @@ function updateTrap() {
     if (trap.frame===10) {
       player.visible=false; player.pilotMode=true;
       pilotTimer=PILOT_FRAMES; multKill=0;
+      // Immediately show a scared panel when pilot mode starts
+      comicPanel = null;
+      spawnComicPanel('scared');
+      comicCooldown = COMIC_GAP;
     }
     if (trap.frame>=trap.maxFrames) { trap.phase='open'; trap.frame=0; }
   } else if (trap.phase==='closing') {
@@ -727,24 +732,25 @@ function update() {
     }
   } else {
     if (comicCooldown > 0) { comicCooldown--; }
-    else {
-      // Cycle through characters in order; skip if in HQ
-      let picked = null;
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const i = (comicNextChar + attempt) % 4;
-        const o = officials[i];
-        if (o && o.state!=='return' && o.state!=='hq') { picked = i; break; }
-      }
-      if (picked !== null) {
-        comicNextChar = (picked + 1) % 4;
-        const o = officials[picked];
-        const key    = CHAR_KEYS[o.pers];
-        const mood   = (o.state==='scared') ? 'scared' : 'chase';
-        const phrases = COMIC_PHRASES[key][mood];
-        const phrase  = phrases[Math.floor(Math.random()*phrases.length)];
-        comicPanel = { charIdx: picked, mood, key, phrase, timer: COMIC_SHOW, alpha: 0 };
-      }
-    }
+    else { spawnComicPanel(); }
+  }
+}
+
+function spawnComicPanel(forceMood) {
+  let picked = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const i = (comicNextChar + attempt) % 4;
+    const o = officials[i];
+    if (o && o.state!=='return' && o.state!=='hq') { picked = i; break; }
+  }
+  if (picked !== null) {
+    comicNextChar = (picked + 1) % 4;
+    const o = officials[picked];
+    const key    = CHAR_KEYS[o.pers];
+    const mood   = forceMood || ((o.state==='scared') ? 'scared' : 'chase');
+    const phrases = COMIC_PHRASES[key][mood];
+    const phrase  = phrases[Math.floor(Math.random()*phrases.length)];
+    comicPanel = { charIdx: picked, mood, key, phrase, timer: COMIC_SHOW, alpha: 0 };
   }
 }
 
