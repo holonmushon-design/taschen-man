@@ -35,26 +35,23 @@ canvas { display: block; image-rendering: pixelated; }
   <span>LEVEL: <span id="level">1</span></span>
 </div>
 <canvas id="c"></canvas>
-<div id="msg">Press ENTER or SPACE to start</div>
+<div id="msg">Loading assets…</div>
+<audio id="bgm" src="assets/Desert_Caravan_Uprising.mp3" loop preload="auto"></audio>
 
 <script>
 // ═══════════════════════════════════════════════════
-//  SCREEN SETUP — fit MacBook Pro 13"
+//  SCREEN SETUP
 // ═══════════════════════════════════════════════════
 const COLS = 19, ROWS = 21;
 const DPR  = window.devicePixelRatio || 1;
-
-// Available screen space (leave ~80px for HUD + title + msg)
-const avH = Math.min(window.innerHeight - 80, 780);
-const avW = window.innerWidth - 20;
-// Pick largest even CELL that fits
-let CELL = Math.floor(Math.min(avH / ROWS, avW / COLS));
-if (CELL % 2 !== 0) CELL--;          // must be even (speed=2 math)
+const avH  = Math.min(window.innerHeight - 80, 780);
+const avW  = window.innerWidth - 20;
+let CELL   = Math.floor(Math.min(avH / ROWS, avW / COLS));
+if (CELL % 2 !== 0) CELL--;
 CELL = Math.max(24, Math.min(40, CELL));
 
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
-// Retina / HiDPI: render at 2× then scale down via CSS for crisp look
 canvas.width  = COLS * CELL * DPR;
 canvas.height = ROWS * CELL * DPR;
 canvas.style.width  = `${COLS * CELL}px`;
@@ -68,8 +65,8 @@ const SPEED_PLAYER   = 2;
 const SPEED_OFFICIAL = 2;
 const SPEED_SCARED   = 1;
 const SPEED_RETURN   = 2;
-const PILOT_FRAMES   = 600;   // 10 s @ 60 fps
-const WARN_FRAMES    = 180;   // flash warning last 3 s
+const PILOT_FRAMES   = 600;
+const WARN_FRAMES    = 180;
 
 const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
 const UP={dx:0,dy:-1}, DOWN={dx:0,dy:1}, LEFT={dx:-1,dy:0}, RIGHT={dx:1,dy:0};
@@ -79,89 +76,217 @@ const scoreEl=document.getElementById('score');
 const livesEl=document.getElementById('lives');
 const levelEl=document.getElementById('level');
 const msgEl  =document.getElementById('msg');
+const bgm    =document.getElementById('bgm');
 
 // ═══════════════════════════════════════════════════
-//  MAZE  (19 × 21)
+//  MAZE
 // ═══════════════════════════════════════════════════
 const BASE = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 0
-  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1], // 1
-  [1,0,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,0,1], // 2
-  [1,2,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,2,1], // 3
-  [1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1], // 4
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], // 5
-  [1,0,1,1,0,1,1,0,1,0,0,0,1,0,1,1,0,0,1], // 6
-  [1,0,1,1,0,1,1,0,1,5,5,5,1,0,1,1,0,0,1], // 7  ← HQ door
-  [1,0,0,0,0,0,0,0,1,4,4,4,1,0,0,0,0,0,1], // 8  ← HQ interior
-  [3,3,3,3,0,1,1,0,1,4,4,4,1,0,1,1,0,3,3], // 9  tunnel
-  [1,1,1,1,0,1,1,0,1,4,4,4,1,0,1,1,0,1,1], //10  ← HQ interior
-  [1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1], //11
-  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], //12
-  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1], //13
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1], //14
-  [1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1], //15
-  [1,2,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,2,1], //16
-  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1], //17
-  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,0,1], //18
-  [1,0,1,1,0,1,1,0,1,3,3,3,1,0,1,1,0,0,1], //19  player spawn
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], //20
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,0,1],
+  [1,2,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,2,1],
+  [1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,1,0,0,0,1,0,1,1,0,0,1],
+  [1,0,1,1,0,1,1,0,1,5,5,5,1,0,1,1,0,0,1],
+  [1,0,0,0,0,0,0,0,1,4,4,4,1,0,0,0,0,0,1],
+  [3,3,3,3,0,1,1,0,1,4,4,4,1,0,1,1,0,3,3],
+  [1,1,1,1,0,1,1,0,1,4,4,4,1,0,1,1,0,1,1],
+  [1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1],
+  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1],
+  [1,2,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,2,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,0,1],
+  [1,0,1,1,0,1,1,0,1,3,3,3,1,0,1,1,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
 // ═══════════════════════════════════════════════════
 //  BUILDING TYPE PRE-ASSIGNMENT
-//  6 regular types (0-5), greedy coloring so no two
-//  adjacent wall cells share the same type.
 // ═══════════════════════════════════════════════════
 const bType = Array.from({length:ROWS}, ()=>new Array(COLS).fill(-1));
 (function assignBuildings() {
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (BASE[r][c] !== WALL) continue;
-      const used = new Set();
-      [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dr,dc]) => {
-        const nr=r+dr, nc=c+dc;
-        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&bType[nr][nc]>=0) used.add(bType[nr][nc]);
-      });
-      for (let t=0;t<6;t++) { if(!used.has(t)){bType[r][c]=t;break;} }
-      if (bType[r][c]<0) bType[r][c]=0; // fallback
-    }
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
+    if (BASE[r][c]!==WALL) continue;
+    const used=new Set();
+    [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dr,dc])=>{
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&bType[nr][nc]>=0) used.add(bType[nr][nc]);
+    });
+    for(let t=0;t<6;t++){if(!used.has(t)){bType[r][c]=t;break;}}
+    if(bType[r][c]<0) bType[r][c]=0;
   }
 })();
+
+// ═══════════════════════════════════════════════════
+//  SPRITE LOADING
+// ═══════════════════════════════════════════════════
+const SP = {};   // key → Image[] (compacted, no nulls)
+let assetsTotal = 0, assetsLoaded = 0, assetsReady = false;
+
+// [key, basePath, count]  — loader tries _00.._NN, silently skips missing
+const SPRITE_DEFS = [
+  ['player',                'assets/player/operative_walk_side',       8],
+  ['ayatollah_normal',      'assets/enemies/ayatollah_normal',         10],
+  ['ayatollah_scared',      'assets/enemies/ayatollah_scared',         10],
+  ['ayatollah_side',        'assets/enemies/ayatollah_side',           5],
+  ['ayatollah_scared_side', 'assets/enemies/ayatollah_scared_side',    3],
+  ['guard_normal',          'assets/enemies/guard_normal',             8],
+  ['guard_scared',          'assets/enemies/guard_scared',             6],   // gaps at 01,05
+  ['basij_normal',          'assets/enemies/basij_normal',             7],
+  ['basij_scared',          'assets/enemies/basij_scared',             8],
+  ['female_normal',         'assets/enemies/female_normal',            8],
+  ['female_scared',         'assets/enemies/female_scared',            6],   // gap at 03
+  ['jet',                   'assets/jet/jet',                          4],
+  ['buildings',             'assets/buildings_a/buildings_a',          6],
+  ['collectibles',          'assets/collectibles/collectibles',        10],
+  ['compound',              'assets/hq/compound',                      1],
+];
+
+function loadSprites() {
+  SPRITE_DEFS.forEach(([key, base, count]) => {
+    SP[key] = new Array(count).fill(null);
+    for (let i = 0; i < count; i++) {
+      assetsTotal++;
+      const img  = new Image();
+      const path = `${base}_${String(i).padStart(2,'0')}.png`;
+      img.onload  = () => { SP[key][i] = img; onLoad(); };
+      img.onerror = () => { onLoad(); }; // leave null, gets filtered
+      img.src = path;
+    }
+  });
+}
+
+function onLoad() {
+  assetsLoaded++;
+  if (assetsLoaded >= assetsTotal) {
+    Object.keys(SP).forEach(k => { SP[k] = SP[k].filter(Boolean); });
+    assetsReady = true;
+    msgEl.textContent = 'Press ENTER or SPACE to start';
+  }
+}
+
+loadSprites();
+
+// ═══════════════════════════════════════════════════
+//  SPRITE DRAW HELPERS
+// ═══════════════════════════════════════════════════
+
+// Draw one frame from a sprite array, centred on (cx, cy)
+function spr(arr, idx, cx, cy, flip=false) {
+  if (!arr || !arr.length) return false;
+  const img = arr[Math.min(idx, arr.length-1)];
+  if (!img) return false;
+  const s = CELL;
+  ctx.save();
+  ctx.translate(cx - s/2, cy - s/2);
+  if (flip) { ctx.scale(-1,1); ctx.translate(-s,0); }
+  ctx.drawImage(img, 0, 0, s, s);
+  ctx.restore();
+  return true;
+}
+
+// Animated sprite: cycles all frames at given speed (game-frames per sprite-frame)
+function sprAnim(key, cx, cy, flip=false, speed=7) {
+  const arr = SP[key];
+  if (!arr || !arr.length) return false;
+  return spr(arr, Math.floor(animFrame/speed) % arr.length, cx, cy, flip);
+}
+
+// Direction-aware entity draw
+// charType: 'player'|'ayatollah'|'guard'|'basij'|'female'
+// state:    'normal'|'scared'
+function drawEntitySprite(charType, state, dir, cx, cy) {
+  const isRight = (dir===RIGHT);
+  const flip    = isRight;
+  const speed   = 7;
+
+  // ── Ayatollah has per-direction sprite sets ──────────────────────
+  if (charType === 'ayatollah') {
+    if (dir===LEFT || dir===RIGHT) {
+      const key = state==='scared' ? 'ayatollah_scared_side' : 'ayatollah_side';
+      return sprAnim(key, cx, cy, flip, speed);
+    }
+    const key = state==='scared' ? 'ayatollah_scared' : 'ayatollah_normal';
+    const arr = SP[key];
+    if (!arr || !arr.length) return false;
+    const half   = Math.floor(arr.length/2);
+    const subset = (dir===UP) ? arr.slice(half) : arr.slice(0, half||arr.length);
+    if (!subset.length) return false;
+    const img = subset[Math.floor(animFrame/speed) % subset.length];
+    if (!img) return false;
+    const s=CELL;
+    ctx.save(); ctx.translate(cx-s/2, cy-s/2);
+    ctx.drawImage(img,0,0,s,s);
+    ctx.restore();
+    return true;
+  }
+
+  // ── Player ────────────────────────────────────────────────────────
+  if (charType === 'player') {
+    const arr = SP['player'];
+    if (!arr || !arr.length) return false;
+    let subset;
+    if      (dir===DOWN)          subset = [arr[0],arr[1]].filter(Boolean);
+    else if (dir===UP)            subset = [arr[4]].filter(Boolean);
+    else /* LEFT or RIGHT */      subset = [arr[5],arr[6]].filter(Boolean);
+    if (!subset.length) subset = arr;
+    const img = subset[Math.floor(animFrame/speed) % subset.length];
+    if (!img) return false;
+    const s=CELL;
+    ctx.save(); ctx.translate(cx-s/2,cy-s/2);
+    if (flip) { ctx.scale(-1,1); ctx.translate(-s,0); }
+    ctx.drawImage(img,0,0,s,s);
+    ctx.restore();
+    return true;
+  }
+
+  // ── All other enemies: cycle all frames, flip for RIGHT ───────────
+  const sfx = state==='scared' ? '_scared' : '_normal';
+  return sprAnim(charType+sfx, cx, cy, flip, speed);
+}
 
 // ═══════════════════════════════════════════════════
 //  GAME STATE
 // ═══════════════════════════════════════════════════
 let maze, score, lives, level;
-let gameState; // 'start'|'playing'|'dead'|'levelclear'|'gameover'
+let gameState;
 let dotsLeft, pilotTimer, multKill, animFrame;
 let player, officials;
 const floats = [];
-
-// Trap-door animation state
 let trap = null;
-// trap = { col, row, phase:'opening'|'open'|'closing', frame, maxFrames }
+let musicStarted = false;
 
 // ═══════════════════════════════════════════════════
 //  HELPERS
 // ═══════════════════════════════════════════════════
-const ctr  = (c,r) => ({ x: c*CELL + CELL/2, y: r*CELL + CELL/2 });
-const col  = x => Math.floor(x/CELL);
-const row  = y => Math.floor(y/CELL);
-const atCenter = (x,y) => x%CELL===CELL/2 && y%CELL===CELL/2;
+const ctr       = (c,r) => ({ x:c*CELL+CELL/2, y:r*CELL+CELL/2 });
+const col       = x => Math.floor(x/CELL);
+const row       = y => Math.floor(y/CELL);
+const atCenter  = (x,y) => x%CELL===CELL/2 && y%CELL===CELL/2;
 
 function getCell(c,r) {
-  if (r<0||r>=ROWS) return WALL;
+  if(r<0||r>=ROWS) return WALL;
   return maze[r][((c%COLS)+COLS)%COLS];
 }
 function setCell(c,r,v) { maze[r][((c%COLS)+COLS)%COLS]=v; }
 function walkable(c,r,canHQ) {
   const t=getCell(c,r);
-  if (t===WALL) return false;
-  if (t===HQ||t===DOOR) return !!canHQ;
+  if(t===WALL) return false;
+  if(t===HQ||t===DOOR) return !!canHQ;
   return true;
 }
-function hud() {
-  scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level;
+function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level; }
+
+function startMusic() {
+  if (musicStarted) return;
+  musicStarted = true;
+  bgm.volume = 0.55;
+  bgm.play().catch(()=>{});
 }
 
 // ═══════════════════════════════════════════════════
@@ -184,19 +309,16 @@ function initLevel() {
   player={
     x:ps.x, y:ps.y,
     dir:LEFT, nextDir:LEFT,
-    pilotMode:false,
-    visible:true,       // false while underground
+    pilotMode:false, visible:true,
     mouth:0.2, mouthDir:1,
-    trapCol:10, trapRow:19, // where the trap door is
+    trapCol:10, trapRow:19,
   };
 
-  // Four officials start OUTSIDE HQ, spread around the maze
-  // Personalities: 0=Blinky(direct) 1=Pinky(ambush) 2=Inky(flank) 3=Clyde(shy)
   const starts=[
-    {c:4,  r:1,  dir:RIGHT, color:'#cc2200', face:'😠'}, // Blinky
-    {c:14, r:1,  dir:LEFT,  color:'#cc6600', face:'😡'}, // Pinky
-    {c:1,  r:14, dir:RIGHT, color:'#005c3a', face:'🤬'}, // Inky
-    {c:17, r:14, dir:LEFT,  color:'#550066', face:'😤'}, // Clyde
+    {c:4,  r:1,  dir:RIGHT, color:'#cc2200', face:'😠'},
+    {c:14, r:1,  dir:LEFT,  color:'#cc6600', face:'😡'},
+    {c:1,  r:14, dir:RIGHT, color:'#005c3a', face:'🤬'},
+    {c:17, r:14, dir:LEFT,  color:'#550066', face:'😤'},
   ];
   officials=starts.map((s,i)=>{
     const p=ctr(s.c,s.r);
@@ -209,7 +331,9 @@ function initLevel() {
 //  INPUT
 // ═══════════════════════════════════════════════════
 document.addEventListener('keydown',e=>{
+  if(!assetsReady) return;
   if (e.code==='Enter'||e.code==='Space') {
+    startMusic();
     if (gameState==='start'||gameState==='dead') {
       if(gameState==='dead') initLevel();
       gameState='playing'; msgEl.textContent=''; return;
@@ -231,7 +355,7 @@ document.addEventListener('keydown',e=>{
 //  PLAYER MOVEMENT
 // ═══════════════════════════════════════════════════
 function movePlayer() {
-  if (!player.visible) return; // underground — plane handles movement
+  if (!player.visible) return;
   if (atCenter(player.x,player.y)) {
     const c=col(player.x), r=row(player.y);
     if (walkable(c+player.nextDir.dx, r+player.nextDir.dy, false))
@@ -240,12 +364,11 @@ function movePlayer() {
   }
   player.x+=player.dir.dx*SPEED_PLAYER;
   player.y+=player.dir.dy*SPEED_PLAYER;
-  if (player.x<0)           player.x+=COLS*CELL;
-  if (player.x>=COLS*CELL)  player.x-=COLS*CELL;
+  if(player.x<0)          player.x+=COLS*CELL;
+  if(player.x>=COLS*CELL) player.x-=COLS*CELL;
 }
 
 function movePlane() {
-  // Plane uses same movement logic as player but visible=false (underground body)
   if (!player.pilotMode) return;
   if (atCenter(player.x,player.y)) {
     const c=col(player.x), r=row(player.y);
@@ -255,26 +378,25 @@ function movePlane() {
   }
   player.x+=player.dir.dx*SPEED_PLAYER;
   player.y+=player.dir.dy*SPEED_PLAYER;
-  if (player.x<0)           player.x+=COLS*CELL;
-  if (player.x>=COLS*CELL)  player.x-=COLS*CELL;
+  if(player.x<0)          player.x+=COLS*CELL;
+  if(player.x>=COLS*CELL) player.x-=COLS*CELL;
 }
 
+// ═══════════════════════════════════════════════════
+//  COLLECT
+// ═══════════════════════════════════════════════════
 function collectDot() {
   if (!atCenter(player.x,player.y)) return;
   const c=col(player.x), r=row(player.y);
   const t=getCell(c,r);
-
   if (t===DOT) {
     setCell(c,r,EMPTY); score+=10; dotsLeft--; hud();
     if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ENTER to continue`;}
-
   } else if (t===MASK) {
     setCell(c,r,EMPTY); score+=50; dotsLeft--; hud();
     if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ENTER to continue`;return;}
-    // Open trap door — operative drops underground, plane emerges
     player.trapCol=c; player.trapRow=r;
-    trap={col:c, row:r, phase:'opening', frame:0, maxFrames:22};
-    // Officials reverse and go scared
+    trap={col:c,row:r,phase:'opening',frame:0,maxFrames:22};
     officials.forEach(o=>{
       if(o.state==='chase'){
         o.state='scared'; o.eatDelay=60;
@@ -287,28 +409,19 @@ function collectDot() {
 }
 
 // ═══════════════════════════════════════════════════
-//  TRAP DOOR ANIMATION
+//  TRAP DOOR
 // ═══════════════════════════════════════════════════
 function updateTrap() {
   if (!trap) return;
   trap.frame++;
-
   if (trap.phase==='opening') {
     if (trap.frame===10) {
-      // Operative drops in — becomes invisible, pilot mode starts
-      player.visible=false;
-      player.pilotMode=true;
-      pilotTimer=PILOT_FRAMES;
-      multKill=0;
+      player.visible=false; player.pilotMode=true;
+      pilotTimer=PILOT_FRAMES; multKill=0;
     }
     if (trap.frame>=trap.maxFrames) { trap.phase='open'; trap.frame=0; }
-
-  } else if (trap.phase==='open') {
-    // Nothing — stays open during pilot mode
-
   } else if (trap.phase==='closing') {
     if (trap.frame===10) {
-      // Operative climbs back out
       const p=ctr(trap.col,trap.row);
       player.x=p.x; player.y=p.y;
       player.dir=UP; player.nextDir=UP;
@@ -328,7 +441,7 @@ function chaseTarget(o) {
   if (o.pers===1) return {c:pc+pdx*4, r:pr+pdy*4};
   if (o.pers===2) {
     const b=officials[0];
-    const bc=col(b.x),br=row(b.y), ac=pc+pdx*2, ar=pr+pdy*2;
+    const bc=col(b.x),br=row(b.y),ac=pc+pdx*2,ar=pr+pdy*2;
     return {c:ac*2-bc, r:ar*2-br};
   }
   if (o.pers===3) {
@@ -340,16 +453,16 @@ function chaseTarget(o) {
 
 function pickDir(o,tc,tr,canHQ,maximize) {
   const oc=col(o.x), or_=row(o.y);
-  let candidates=DIRS
+  let cands=DIRS
     .filter(d=>!(d.dx===-o.dir.dx&&d.dy===-o.dir.dy)&&walkable(oc+d.dx,or_+d.dy,canHQ))
     .map(d=>{
       const nc=((oc+d.dx)%COLS+COLS)%COLS, nr=or_+d.dy;
       return {d, dist:Math.abs(nc-tc)+Math.abs(nr-tr)};
     })
     .sort((a,b)=>maximize?b.dist-a.dist:a.dist-b.dist);
-  if (!candidates.length)
-    candidates=DIRS.filter(d=>walkable(oc+d.dx,or_+d.dy,canHQ)).map(d=>({d,dist:0}));
-  if (candidates.length) o.dir=candidates[0].d;
+  if(!cands.length)
+    cands=DIRS.filter(d=>walkable(oc+d.dx,or_+d.dy,canHQ)).map(d=>({d,dist:0}));
+  if(cands.length) o.dir=cands[0].d;
 }
 
 function moveOfficial(o) {
@@ -358,19 +471,18 @@ function moveOfficial(o) {
     if (o.state==='chase') {
       const t=chaseTarget(o); pickDir(o,t.c,t.r,false,false);
     } else if (o.state==='scared') {
-      // Authentic Pac-Man frightened: random direction
       const valid=DIRS.filter(d=>!(d.dx===-o.dir.dx&&d.dy===-o.dir.dy)&&walkable(oc+d.dx,or_+d.dy,false));
-      if (valid.length) o.dir=valid[Math.floor(Math.random()*valid.length)];
+      if(valid.length) o.dir=valid[Math.floor(Math.random()*valid.length)];
     } else if (o.state==='return') {
-      if (getCell(oc,or_)===HQ) {
+      if(getCell(oc,or_)===HQ){
         const p=ctr(10,9); o.x=p.x; o.y=p.y;
         o.state='hq'; o.releaseTimer=180; o.dir=DOWN; return;
       }
-      if (or_<=7&&oc>=9&&oc<=11) pickDir(o,oc,9,true,false);
+      if(or_<=7&&oc>=9&&oc<=11) pickDir(o,oc,9,true,false);
       else pickDir(o,10,6,true,false);
     } else if (o.state==='hq') {
-      if (!player.pilotMode) o.releaseTimer--;
-      if (o.releaseTimer<=0) { o.state='exit'; o.dir=UP; }
+      if(!player.pilotMode) o.releaseTimer--;
+      if(o.releaseTimer<=0){ o.state='exit'; o.dir=UP; }
       else {
         const v=DIRS.filter(d=>walkable(oc+d.dx,or_+d.dy,true));
         if(v.length) o.dir=v[Math.floor(Math.random()*v.length)];
@@ -383,8 +495,8 @@ function moveOfficial(o) {
   const spd=o.state==='scared'?SPEED_SCARED:o.state==='return'?SPEED_RETURN:SPEED_OFFICIAL;
   const canHQ=o.state==='return'||o.state==='hq'||o.state==='exit';
   const nx=o.x+o.dir.dx*spd, ny=o.y+o.dir.dy*spd;
-  if (walkable(col(nx),row(ny),canHQ)) { o.x=nx; o.y=ny; }
-  else { o.x=oc*CELL+CELL/2; o.y=or_*CELL+CELL/2; }
+  if(walkable(col(nx),row(ny),canHQ)){o.x=nx;o.y=ny;}
+  else{o.x=oc*CELL+CELL/2; o.y=or_*CELL+CELL/2;}
   if(o.x<0) o.x+=COLS*CELL; if(o.x>=COLS*CELL) o.x-=COLS*CELL;
   if(o.y<-CELL*2||o.y>(ROWS+2)*CELL){const p=ctr(10,9);o.x=p.x;o.y=p.y;o.state='hq';o.releaseTimer=120;o.dir=DOWN;}
 }
@@ -416,279 +528,51 @@ function checkCollisions() {
 // ═══════════════════════════════════════════════════
 function update() {
   animFrame++;
-
   if (pilotTimer>0) {
     pilotTimer--;
     if (pilotTimer===0) {
       player.pilotMode=false;
       officials.forEach(o=>{if(o.state==='scared')o.state='chase';});
-      // Plane leaves, trap door opens to let operative out
-      if(trap) { trap.phase='closing'; trap.frame=0; trap.maxFrames=24; }
-      else { player.visible=true; } // safety fallback
-      msgEl.textContent='⚠️ Plane left — operative back on the ground!';
+      if(trap){trap.phase='closing';trap.frame=0;trap.maxFrames=24;}
+      else{player.visible=true;}
+      msgEl.textContent='⚠️ Plane left — operative back on ground!';
       setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},2000);
     }
   }
-
   player.mouth+=0.06*player.mouthDir;
   if(player.mouth>0.38) player.mouthDir=-1;
   if(player.mouth<0.02) player.mouthDir=1;
 
-  movePlayer();
-  movePlane();
-  collectDot();
-  updateTrap();
+  movePlayer(); movePlane(); collectDot(); updateTrap();
   officials.forEach(o=>{ if(o.eatDelay>0)o.eatDelay--; moveOfficial(o); });
   checkCollisions();
   for(let i=floats.length-1;i>=0;i--){floats[i].y-=1;floats[i].alpha-=0.02;if(floats[i].alpha<=0)floats.splice(i,1);}
 }
 
 // ═══════════════════════════════════════════════════
-//  BUILDING DRAW FUNCTIONS (6 types)
-//  All drawn in CELL×CELL box, origin at top-left
+//  DRAW — MAZE (building sprites)
 // ═══════════════════════════════════════════════════
-function drawBuilding(type, x, y) {
-  const s=CELL;
-  ctx.save(); ctx.translate(x,y);
-  switch(type) {
-    case 0: drawResidential(s); break;
-    case 1: drawApartment(s);   break;
-    case 2: drawShop(s);        break;
-    case 3: drawOffice(s);      break;
-    case 4: drawMosque(s);      break;
-    case 5: drawFactory(s);     break;
-  }
-  ctx.restore();
-}
-
-// Type 0 — Residential house (warm dark brown, pitched roof, 2 windows + door)
-function drawResidential(s) {
-  // Base wall
-  ctx.fillStyle='#5c3420'; ctx.fillRect(0,0,s,s);
-  // Pitched roof (dark)
-  ctx.fillStyle='#3a1e0e';
-  ctx.beginPath(); ctx.moveTo(0,s*0.42); ctx.lineTo(s*0.5,s*0.02); ctx.lineTo(s,s*0.42); ctx.closePath(); ctx.fill();
-  // Lit windows
-  ctx.fillStyle='#ffe070';
-  ctx.fillRect(s*0.08,s*0.48,s*0.3,s*0.2);
-  ctx.fillRect(s*0.62,s*0.48,s*0.3,s*0.2);
-  // Window cross
-  ctx.strokeStyle='#5c3420'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(s*0.08+s*0.15,s*0.48); ctx.lineTo(s*0.08+s*0.15,s*0.68); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(s*0.08,s*0.48+s*0.1); ctx.lineTo(s*0.08+s*0.3,s*0.48+s*0.1); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(s*0.62+s*0.15,s*0.48); ctx.lineTo(s*0.62+s*0.15,s*0.68); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(s*0.62,s*0.48+s*0.1); ctx.lineTo(s*0.62+s*0.3,s*0.48+s*0.1); ctx.stroke();
-  // Door
-  ctx.fillStyle='#8b4513';
-  ctx.fillRect(s*0.36,s*0.7,s*0.28,s*0.3);
-  ctx.fillStyle='#ffe070'; ctx.beginPath(); ctx.arc(s*0.585,s*0.84,s*0.03,0,Math.PI*2); ctx.fill();
-}
-
-// Type 1 — Apartment block (dark terracotta, grid windows, water tank)
-function drawApartment(s) {
-  ctx.fillStyle='#6b2a18'; ctx.fillRect(0,0,s,s);
-  // Horizontal divider lines (floors)
-  ctx.strokeStyle='#4a1a08'; ctx.lineWidth=1;
-  [0.33,0.55,0.77].forEach(f=>{ctx.beginPath();ctx.moveTo(0,s*f);ctx.lineTo(s,s*f);ctx.stroke();});
-  // Window grid 2×3
-  ctx.fillStyle='#ffe070';
-  [[0.08,0.1],[0.52,0.1],[0.08,0.38],[0.52,0.38],[0.08,0.62],[0.52,0.62]].forEach(([cx,cy])=>{
-    ctx.fillRect(s*cx,s*cy,s*0.35,s*0.16);
-  });
-  // Water tank on roof
-  ctx.fillStyle='#3a1008'; ctx.fillRect(s*0.3,0,s*0.4,s*0.06);
-}
-
-// Type 2 — Bazaar / shop (dark olive-green, coloured awning, display window)
-function drawShop(s) {
-  ctx.fillStyle='#2a3e1a'; ctx.fillRect(0,0,s,s);
-  // Upper windows
-  ctx.fillStyle='#ffe070';
-  ctx.fillRect(s*0.1,s*0.08,s*0.3,s*0.18);
-  ctx.fillRect(s*0.6,s*0.08,s*0.3,s*0.18);
-  // Awning (colourful stripes)
-  const awY=s*0.45, awH=s*0.14;
-  const aColors=['#cc3300','#ee6600','#cc3300','#ee6600'];
-  for(let i=0;i<4;i++){ctx.fillStyle=aColors[i];ctx.fillRect(i*s*0.25,awY,s*0.26,awH);}
-  ctx.strokeStyle='#441100'; ctx.lineWidth=1;
-  ctx.strokeRect(0,awY,s,awH);
-  // Display window (glass look)
-  ctx.fillStyle='rgba(140,210,255,0.18)';
-  ctx.strokeStyle='#4a6a2a'; ctx.lineWidth=1;
-  ctx.fillRect(s*0.06,s*0.62,s*0.88,s*0.34);
-  ctx.strokeRect(s*0.06,s*0.62,s*0.88,s*0.34);
-  ctx.beginPath(); ctx.moveTo(s*0.5,s*0.62); ctx.lineTo(s*0.5,s*0.96); ctx.stroke();
-}
-
-// Type 3 — Government office (dark navy, horizontal glass bands, antenna)
-function drawOffice(s) {
-  ctx.fillStyle='#1a2a48'; ctx.fillRect(0,0,s,s);
-  // Glass window bands
-  ctx.fillStyle='rgba(160,210,255,0.35)';
-  [0.12,0.30,0.48,0.66,0.82].forEach(f=>ctx.fillRect(s*0.04,s*f,s*0.92,s*0.12));
-  // Vertical dividers in bands
-  ctx.strokeStyle='rgba(100,160,220,0.3)'; ctx.lineWidth=0.5;
-  [0.3,0.55,0.8].forEach(x=>{
-    [0.12,0.30,0.48,0.66,0.82].forEach(f=>{ctx.beginPath();ctx.moveTo(s*x,s*f);ctx.lineTo(s*x,s*(f+0.12));ctx.stroke();});
-  });
-  // Antenna
-  ctx.strokeStyle='#8888aa'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(s*0.5,0); ctx.lineTo(s*0.5,-s*0.18); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(s*0.38,-s*0.1); ctx.lineTo(s*0.62,-s*0.1); ctx.stroke();
-}
-
-// Type 4 — Mosque / historic (warm brown, dome, arched windows, crescent)
-function drawMosque(s) {
-  ctx.fillStyle='#4a3a28'; ctx.fillRect(0,0,s,s);
-  // Dome
-  ctx.fillStyle='#6a5a3a';
-  ctx.beginPath(); ctx.arc(s*0.5,s*0.32,s*0.28,Math.PI,0); ctx.fill();
-  ctx.fillStyle='#4a3a28';
-  ctx.beginPath(); ctx.arc(s*0.5,s*0.32,s*0.2,Math.PI,0); ctx.fill();
-  // Crescent on dome tip
-  ctx.fillStyle='#ffd700'; ctx.font=`${s*0.22}px serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('☪',s*0.5,s*0.08);
-  // Columns
-  ctx.fillStyle='#6a5030';
-  ctx.fillRect(s*0.08,s*0.55,s*0.14,s*0.45);
-  ctx.fillRect(s*0.78,s*0.55,s*0.14,s*0.45);
-  // Arched window
-  ctx.fillStyle='#ffe070';
-  ctx.beginPath(); ctx.arc(s*0.5,s*0.65,s*0.18,Math.PI,0); ctx.fill();
-  ctx.fillRect(s*0.32,s*0.65,s*0.36,s*0.25);
-  ctx.fillStyle='#4a3a28';
-  ctx.beginPath(); ctx.arc(s*0.5,s*0.65,s*0.1,Math.PI,0); ctx.fill();
-  ctx.fillRect(s*0.4,s*0.65,s*0.2,s*0.15);
-}
-
-// Type 5 — Factory / industrial (charcoal, chimney, small windows, brick)
-function drawFactory(s) {
-  ctx.fillStyle='#2a2222'; ctx.fillRect(0,0,s,s);
-  // Chimney (tall, off-center)
-  ctx.fillStyle='#1a1212';
-  ctx.fillRect(s*0.62,0,s*0.2,s*0.55);
-  // Smoke wisps
-  ctx.fillStyle='rgba(150,140,130,0.3)';
-  ctx.beginPath(); ctx.arc(s*0.72,-s*0.04,s*0.09,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(s*0.68,-s*0.12,s*0.07,0,Math.PI*2); ctx.fill();
-  // Main building block
-  ctx.fillStyle='#3a2a2a'; ctx.fillRect(0,s*0.28,s*0.6,s*0.72);
-  // Brick lines
-  ctx.strokeStyle='#1a1212'; ctx.lineWidth=0.5;
-  [0.45,0.62,0.79].forEach(f=>{ctx.beginPath();ctx.moveTo(0,s*f);ctx.lineTo(s*0.6,s*f);ctx.stroke();});
-  // Windows
-  ctx.fillStyle='#ffe070';
-  ctx.fillRect(s*0.06,s*0.36,s*0.2,s*0.16);
-  ctx.fillRect(s*0.34,s*0.36,s*0.2,s*0.16);
-  ctx.fillRect(s*0.06,s*0.62,s*0.2,s*0.16);
-}
-
-// ═══════════════════════════════════════════════════
-//  TEHRAN HQ SPECIAL BUILDING (drawn over HQ cells)
-// ═══════════════════════════════════════════════════
-function drawHQBuilding() {
-  const x=8*CELL, y=7*CELL, w=5*CELL, h=4*CELL;
-  // Grand government building background
-  ctx.fillStyle='#1a0808'; ctx.fillRect(x,y,w,h);
-  // Facade
-  ctx.fillStyle='#2d1010'; ctx.fillRect(x+2,y+2,w-4,h-4);
-  // Roof crenellations
-  ctx.fillStyle='#3d1818';
-  for(let i=0;i<8;i++) ctx.fillRect(x+i*(w/8),y,w/8-2,h*0.06);
-  // Columns (evenly spaced)
-  ctx.fillStyle='#4a2020';
-  [0.12,0.28,0.44,0.60,0.76].forEach(f=>ctx.fillRect(x+w*f,y+h*0.12,w*0.06,h*0.78));
-  // Iranian flag colours stripe
-  ctx.fillStyle='#006600'; ctx.fillRect(x+4,y+h*0.2,w-8,h*0.06);
-  ctx.fillStyle='#ffffff'; ctx.fillRect(x+4,y+h*0.26,w-8,h*0.06);
-  ctx.fillStyle='#cc0000'; ctx.fillRect(x+4,y+h*0.32,w-8,h*0.06);
-  // Main door / gate
-  ctx.fillStyle='#0a0000';
-  ctx.beginPath(); ctx.arc(x+w*0.5,y+h*0.72,w*0.12,Math.PI,0); ctx.fill();
-  ctx.fillRect(x+w*0.38,y+h*0.72,w*0.24,h*0.26);
-  // Windows (arched, lit ominously red)
-  ctx.fillStyle='rgba(200,0,0,0.6)';
-  [[0.18,0.44],[0.38,0.44],[0.58,0.44],[0.78,0.44]].forEach(([fx,fy])=>{
-    ctx.beginPath(); ctx.arc(x+w*fx,y+h*fy,w*0.06,Math.PI,0); ctx.fill();
-    ctx.fillRect(x+w*fx-w*0.06,y+h*fy,w*0.12,h*0.14);
-  });
-  // Label
-  ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(9,CELL*0.38)}px Courier New`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('☪ TEHRAN HQ',x+w/2,y+h*0.14);
-  // Door gate lines (dashed red)
-  ctx.strokeStyle='#ff4444'; ctx.lineWidth=1.5; ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(x+CELL,y+CELL); ctx.lineTo(x+4*CELL,y+CELL); ctx.stroke();
-  ctx.setLineDash([]);
-}
-
-// ═══════════════════════════════════════════════════
-//  TRAP DOOR DRAWING
-// ═══════════════════════════════════════════════════
-function drawTrapDoor() {
-  if (!trap) return;
-  const tx=trap.col*CELL, ty=trap.row*CELL, s=CELL;
-  const progress=trap.frame/trap.maxFrames; // 0→1
-
-  // Dark hole in the ground
-  ctx.fillStyle='#000';
-  ctx.fillRect(tx,ty,s,s);
-  // Hole ellipse
-  ctx.fillStyle='#111';
-  ctx.beginPath();
-  ctx.ellipse(tx+s/2,ty+s/2, s*0.38*Math.min(progress*2,1), s*0.22, 0, 0, Math.PI*2);
-  ctx.fill();
-
-  if (trap.phase==='opening'||trap.phase==='closing') {
-    const openFrac = trap.phase==='opening' ? progress : 1-progress;
-    // Left door panel (slides left)
-    ctx.fillStyle='#8b4513';
-    ctx.fillRect(tx - openFrac*s*0.5, ty, s*0.5, s);
-    ctx.strokeStyle='#5c2a0a'; ctx.lineWidth=1.5;
-    ctx.strokeRect(tx - openFrac*s*0.5, ty, s*0.5, s);
-    // Right door panel (slides right)
-    ctx.fillStyle='#8b4513';
-    ctx.fillRect(tx+s*0.5 + openFrac*s*0.5, ty, s*0.5, s);
-    ctx.strokeStyle='#5c2a0a';
-    ctx.strokeRect(tx+s*0.5 + openFrac*s*0.5, ty, s*0.5, s);
-    // Hinge bolts
-    ctx.fillStyle='#ffd700';
-    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08, ty+s*0.25, s*0.05, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08, ty+s*0.75, s*0.05, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42, ty+s*0.25, s*0.05, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42, ty+s*0.75, s*0.05, 0, Math.PI*2); ctx.fill();
-  } else if (trap.phase==='open') {
-    // Just the open hole with glow
-    ctx.fillStyle='rgba(0,100,255,0.15)';
-    ctx.beginPath(); ctx.arc(tx+s/2,ty+s/2,s*0.4,0,Math.PI*2); ctx.fill();
-  }
-}
-
-// ═══════════════════════════════════════════════════
-//  DRAW
-// ═══════════════════════════════════════════════════
-function draw() {
-  ctx.fillStyle='#000011'; ctx.fillRect(0,0,COLS*CELL,ROWS*CELL);
-  drawMaze();
-  drawHQBuilding();
-  drawDots();
-  drawTrapDoor();
-  if(gameState!=='dead') drawPlayer();
-  officials.forEach(drawOfficial);
-  drawFloats();
-  drawOverlay();
-}
-
 function drawMaze() {
-  for(let r=0;r<ROWS;r++) {
-    for(let c=0;c<COLS;c++) {
-      if(maze[r][c]!==WALL) continue;
-      // Skip HQ-area cells — drawn by drawHQBuilding
-      if(r>=7&&r<=10&&c>=8&&c<=12) continue;
-      drawBuilding(bType[r][c], c*CELL, r*CELL);
+  const buildArr = SP['buildings'];
+  const BS = CELL * 1.6; // building draw size — bigger than one cell for city density
+  // Draw top-to-bottom so lower buildings render on top (slight perspective)
+  for (let r=0;r<ROWS;r++) {
+    for (let c=0;c<COLS;c++) {
+      if (maze[r][c]!==WALL) continue;
+      if (r>=7&&r<=10&&c>=8&&c<=12) continue; // HQ drawn separately
+      // Centre the oversized building on the cell centre
+      const cx = c*CELL + CELL/2;
+      const cy = r*CELL + CELL/2;
+      const x  = cx - BS/2;
+      const y  = cy - BS/2;
+      if (buildArr && buildArr.length) {
+        const img = buildArr[Math.min(bType[r][c], buildArr.length-1)];
+        if (img) { ctx.drawImage(img, x, y, BS, BS); continue; }
+      }
+      drawBuildingCanvas(bType[r][c], x, y, BS);
     }
   }
-  // Tunnel row subtle background
+  // Tunnel overlay
   for(let c=0;c<COLS;c++) {
     if(maze[9][c]===EMPTY&&(c<4||c>=COLS-2)) {
       ctx.fillStyle='#001133'; ctx.fillRect(c*CELL,9*CELL,CELL,CELL);
@@ -696,56 +580,121 @@ function drawMaze() {
   }
 }
 
+// ═══════════════════════════════════════════════════
+//  DRAW — DOTS & MASKS (collectible sprites)
+// ═══════════════════════════════════════════════════
 function drawDots() {
+  const coll = SP['collectibles'];
   ctx.textBaseline='middle';
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
     const t=maze[r][c];
     const cx=c*CELL+CELL/2, cy=r*CELL+CELL/2;
-    if(t===DOT) {
-      // Hamantaschen triangle
+    if (t===DOT) {
+      // Hamantaschen: collectibles frames 4 & 5, alternate slowly
+      if (coll && coll.length>5) {
+        const img=coll[4 + (Math.floor(animFrame/40)%2 < coll.length-4 ? Math.floor(animFrame/40)%2 : 0)];
+        if (img) {
+          const ds=CELL*0.55;
+          ctx.drawImage(img, cx-ds/2, cy-ds/2, ds, ds);
+          continue;
+        }
+      }
+      // canvas fallback
       const s=Math.max(5,CELL*0.24);
       ctx.fillStyle='#c8860a';
       ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx+s,cy+s); ctx.lineTo(cx-s,cy+s); ctx.closePath(); ctx.fill();
-      ctx.fillStyle='#8b1a00';
-      ctx.beginPath(); ctx.arc(cx,cy+s*0.35,s*0.3,0,Math.PI*2); ctx.fill();
-    } else if(t===MASK) {
+      ctx.fillStyle='#8b1a00'; ctx.beginPath(); ctx.arc(cx,cy+s*0.35,s*0.3,0,Math.PI*2); ctx.fill();
+
+    } else if (t===MASK) {
+      // Purim mask: collectibles frames 0 & 1, pulsing
       const pulse=1+0.15*Math.sin(animFrame*0.1);
+      if (coll && coll.length>1) {
+        const img=coll[Math.floor(animFrame/20)%2];
+        if (img) {
+          const ds=CELL*0.75*pulse;
+          ctx.drawImage(img, cx-ds/2, cy-ds/2, ds, ds);
+          continue;
+        }
+      }
       ctx.font=`${Math.max(14,CELL*0.55)*pulse}px serif`;
       ctx.textAlign='center'; ctx.fillText('🎭',cx,cy);
     }
   }
 }
 
-function drawPlayer() {
-  if (!player.visible && !player.pilotMode) return; // underground, not yet flying
+// ═══════════════════════════════════════════════════
+//  DRAW — TRAP DOOR (canvas animation)
+// ═══════════════════════════════════════════════════
+function drawTrapDoor() {
+  if (!trap) return;
+  const tx=trap.col*CELL, ty=trap.row*CELL, s=CELL;
+  const progress=trap.frame/trap.maxFrames;
+  ctx.fillStyle='#000'; ctx.fillRect(tx,ty,s,s);
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.ellipse(tx+s/2,ty+s/2,s*0.38*Math.min(progress*2,1),s*0.22,0,0,Math.PI*2); ctx.fill();
+  if (trap.phase==='opening'||trap.phase==='closing') {
+    const openFrac=trap.phase==='opening'?progress:1-progress;
+    ctx.fillStyle='#8b4513';
+    ctx.fillRect(tx-openFrac*s*0.5,ty,s*0.5,s);
+    ctx.strokeStyle='#5c2a0a'; ctx.lineWidth=1.5;
+    ctx.strokeRect(tx-openFrac*s*0.5,ty,s*0.5,s);
+    ctx.fillRect(tx+s*0.5+openFrac*s*0.5,ty,s*0.5,s);
+    ctx.strokeRect(tx+s*0.5+openFrac*s*0.5,ty,s*0.5,s);
+    ctx.fillStyle='#ffd700';
+    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08,ty+s*0.25,s*0.05,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08,ty+s*0.75,s*0.05,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42,ty+s*0.25,s*0.05,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42,ty+s*0.75,s*0.05,0,Math.PI*2); ctx.fill();
+  } else if (trap.phase==='open') {
+    ctx.fillStyle='rgba(0,100,255,0.15)';
+    ctx.beginPath(); ctx.arc(tx+s/2,ty+s/2,s*0.4,0,Math.PI*2); ctx.fill();
+  }
+}
 
-  const x=player.x, y=player.y, r=CELL/2-2;
-  ctx.save(); ctx.translate(x,y);
+// ═══════════════════════════════════════════════════
+//  DRAW — PLAYER
+// ═══════════════════════════════════════════════════
+function drawPlayer() {
+  if (!player.visible && !player.pilotMode) return;
+  const s=CELL, r=s/2-2;
+  ctx.save(); ctx.translate(player.x, player.y);
 
   if (player.pilotMode) {
-    // Fighter jet — emerges from trap door, zooms around Tehran
-    ctx.fillStyle='#2255cc';
-    ctx.beginPath(); ctx.ellipse(0,0,r,r*0.5,0,0,Math.PI*2); ctx.fill();
-    // Nose
-    ctx.fillStyle='#3366ee';
-    ctx.beginPath(); ctx.moveTo(r,0); ctx.lineTo(r*1.5,-r*0.15); ctx.lineTo(r*1.5,r*0.15); ctx.closePath(); ctx.fill();
-    // Wings
-    ctx.fillStyle='#4477dd';
-    ctx.beginPath(); ctx.moveTo(-r*0.2,r*0.1); ctx.lineTo(-r*1.3,r*0.55); ctx.lineTo(-r*0.6,r*0.1); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-r*0.2,-r*0.1); ctx.lineTo(-r*1.3,-r*0.55); ctx.lineTo(-r*0.6,-r*0.1); ctx.closePath(); ctx.fill();
-    // Tail fins
-    ctx.fillStyle='#3366ee';
-    ctx.beginPath(); ctx.moveTo(-r,0); ctx.lineTo(-r*1.4,-r*0.4); ctx.lineTo(-r*0.7,0); ctx.closePath(); ctx.fill();
-    // Pilot head in cockpit
-    ctx.font=`${r*0.75}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('👨',r*0.1,-r*0.3);
-    // Cockpit glass
-    ctx.fillStyle='rgba(100,180,255,0.4)';
-    ctx.beginPath(); ctx.ellipse(r*0.1,-r*0.3,r*0.32,r*0.26,0,0,Math.PI*2); ctx.fill();
-
+    // Try jet sprite first
+    const jetArr=SP['jet'];
+    let jetDrawn=false;
+    if (jetArr && jetArr.length) {
+      let ji=1; // default right
+      if (player.dir===UP)   ji=0;
+      if (player.dir===DOWN) ji=2;
+      if (player.dir===LEFT) ji=1; // flip
+      ji=Math.min(ji, jetArr.length-1);
+      const img=jetArr[ji];
+      if (img) {
+        const flip=(player.dir===LEFT);
+        if (flip) { ctx.scale(-1,1); }
+        ctx.drawImage(img, -s/2, -s/2, s, s);
+        jetDrawn=true;
+      }
+    }
+    if (!jetDrawn) {
+      // Canvas jet fallback
+      ctx.fillStyle='#2255cc';
+      ctx.beginPath(); ctx.ellipse(0,0,r,r*0.5,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#3366ee';
+      ctx.beginPath(); ctx.moveTo(r,0); ctx.lineTo(r*1.5,-r*0.15); ctx.lineTo(r*1.5,r*0.15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#4477dd';
+      ctx.beginPath(); ctx.moveTo(-r*0.2,r*0.1); ctx.lineTo(-r*1.3,r*0.55); ctx.lineTo(-r*0.6,r*0.1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-r*0.2,-r*0.1); ctx.lineTo(-r*1.3,-r*0.55); ctx.lineTo(-r*0.6,-r*0.1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#3366ee';
+      ctx.beginPath(); ctx.moveTo(-r,0); ctx.lineTo(-r*1.4,-r*0.4); ctx.lineTo(-r*0.7,0); ctx.closePath(); ctx.fill();
+      ctx.font=`${r*0.75}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('👨',r*0.1,-r*0.3);
+      ctx.fillStyle='rgba(100,180,255,0.4)';
+      ctx.beginPath(); ctx.ellipse(r*0.1,-r*0.3,r*0.32,r*0.26,0,0,Math.PI*2); ctx.fill();
+    }
     ctx.restore();
-
-    // Pilot timer bar at bottom
+    // Timer bar
     const frac=pilotTimer/PILOT_FRAMES;
     const warn=pilotTimer<WARN_FRAMES&&animFrame%16<8;
     ctx.fillStyle=warn?'#ff4400':'#3399ff';
@@ -753,66 +702,115 @@ function drawPlayer() {
     return;
   }
 
-  // Normal — Mossad operative (spy, pac-man style body)
-  let angle=0;
-  if(player.dir===RIGHT) angle=0;
-  else if(player.dir===LEFT)  angle=Math.PI;
-  else if(player.dir===UP)    angle=-Math.PI/2;
-  else if(player.dir===DOWN)  angle=Math.PI/2;
-  ctx.rotate(angle);
-  ctx.fillStyle='#222222'; // dark spy outfit
-  ctx.beginPath(); ctx.moveTo(0,0);
-  ctx.arc(0,0,r,player.mouth*Math.PI,(2-player.mouth)*Math.PI); ctx.closePath(); ctx.fill();
-  // Spy hat / beret
-  ctx.fillStyle='#003300';
-  ctx.beginPath(); ctx.arc(0,-r*0.4,r*0.55,Math.PI*1.1,Math.PI*1.9); ctx.closePath(); ctx.fill();
-  // Eye
-  ctx.fillStyle='#fff';
-  ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.18,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#00aa00'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.1,0,Math.PI*2); ctx.fill();
+  // Normal operative — try sprite
   ctx.restore();
+  if (!drawEntitySprite('player','normal',player.dir,player.x,player.y)) {
+    // Canvas fallback
+    ctx.save(); ctx.translate(player.x,player.y);
+    let angle=0;
+    if(player.dir===RIGHT) angle=0;
+    else if(player.dir===LEFT)  angle=Math.PI;
+    else if(player.dir===UP)    angle=-Math.PI/2;
+    else if(player.dir===DOWN)  angle=Math.PI/2;
+    ctx.rotate(angle);
+    ctx.fillStyle='#222222';
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.arc(0,0,r,player.mouth*Math.PI,(2-player.mouth)*Math.PI); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#003300';
+    ctx.beginPath(); ctx.arc(0,-r*0.4,r*0.55,Math.PI*1.1,Math.PI*1.9); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.18,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#00aa00'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.1,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
 }
 
+// ═══════════════════════════════════════════════════
+//  DRAW — OFFICIALS
+// ═══════════════════════════════════════════════════
+const CHAR_TYPES=['ayatollah','guard','basij','female'];
+
 function drawOfficial(o) {
+  const charType=CHAR_TYPES[o.pers];
   const r=CELL/2-2;
-  ctx.save(); ctx.translate(o.x,o.y);
-  if(o.state==='scared') {
-    drawForceGhost(o,r, pilotTimer<WARN_FRAMES&&animFrame%20<10 ? 0.35:0.8, '#88ccff');
-  } else if(o.state==='return') {
-    drawForceGhost(o,r,0.3,'#ffffff');
-  } else {
-    if(o.state==='hq') ctx.globalAlpha=0.65;
-    ctx.fillStyle=o.color;
+
+  if (o.state==='return') {
+    // Ghost effect: translucent scared sprite + glow
+    ctx.save();
+    ctx.globalAlpha=0.35+0.08*Math.sin(animFrame*0.18);
+    drawEntitySprite(charType,'scared',o.dir,o.x,o.y);
+    ctx.globalAlpha=1;
+    // Jedi-ghost glow aura
+    const g=ctx.createRadialGradient(o.x,o.y,r*0.3,o.x,o.y,r*2.2);
+    g.addColorStop(0,`rgba(140,200,255,${0.2+0.08*Math.sin(animFrame*0.12)})`);
+    g.addColorStop(1,'rgba(80,140,255,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(o.x,o.y,r*2.2,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const state=o.state==='scared'?'scared':'normal';
+  const warnFlash=o.state==='scared'&&pilotTimer<WARN_FRAMES&&animFrame%20<10;
+
+  ctx.save();
+  if (o.state==='hq') ctx.globalAlpha=0.65;
+  if (warnFlash)       ctx.globalAlpha=0.38;
+
+  if (!drawEntitySprite(charType, state, o.dir, o.x, o.y)) {
+    // Canvas fallback
+    ctx.translate(o.x, o.y);
+    ctx.fillStyle=state==='scared'?'#2244cc':o.color;
     ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
     ctx.font=`${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(o.face,0,0);
   }
+
+  // Add aura for scared state
+  if (o.state==='scared') {
+    ctx.globalAlpha=(0.18+0.08*Math.sin(animFrame*0.15));
+    const g2=ctx.createRadialGradient(o.x,o.y,r*0.5,o.x,o.y,r*1.6);
+    g2.addColorStop(0,'rgba(100,160,255,1)'); g2.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g2;
+    ctx.beginPath(); ctx.arc(o.x,o.y,r*1.6,0,Math.PI*2); ctx.fill();
+  }
+
   ctx.globalAlpha=1; ctx.restore();
 }
 
-function drawForceGhost(o,r,alpha,tint) {
-  const pulse=0.15+0.1*Math.sin(animFrame*0.12);
-  const g=ctx.createRadialGradient(0,0,r*0.3,0,0,r*2.2);
-  g.addColorStop(0,`rgba(140,200,255,${pulse*2*alpha})`); g.addColorStop(1,'rgba(80,140,255,0)');
-  ctx.globalAlpha=1; ctx.fillStyle=g;
-  ctx.beginPath(); ctx.arc(0,0,r*2.2,0,Math.PI*2); ctx.fill();
-  ctx.globalAlpha=(0.35+0.08*Math.sin(animFrame*0.18))*alpha; ctx.fillStyle=o.color;
-  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
-  ctx.globalAlpha=0.25*alpha; ctx.fillStyle=tint;
-  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
-  ctx.globalAlpha=(0.55+0.1*Math.sin(animFrame*0.2))*alpha;
-  ctx.font=`${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(o.face,0,0);
-  ctx.globalAlpha=(0.4+0.2*Math.sin(animFrame*0.15))*alpha;
-  ctx.strokeStyle='#aaddff'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.arc(0,0,r+1,0,Math.PI*2); ctx.stroke();
-  ctx.globalAlpha=1;
+// ═══════════════════════════════════════════════════
+//  DRAW — HQ BUILDING (canvas)
+// ═══════════════════════════════════════════════════
+function drawHQBuilding() {
+  // HQ area: cols 8–12, rows 7–10 → 5 cells wide × 4 cells tall
+  const x = 8*CELL, y = 7*CELL, w = 5*CELL, h = 4*CELL;
+  const compound = SP['compound'] && SP['compound'][0];
+  if (compound) {
+    // Draw the compound sprite scaled to fill the full HQ block
+    ctx.drawImage(compound, x, y, w, h);
+    // Overlay label so it reads clearly in-game
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(x, y, w, CELL*0.55);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${Math.max(9, CELL*0.38)}px Courier New`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('☪ TEHRAN HQ', x+w/2, y+CELL*0.28);
+  } else {
+    // Canvas fallback
+    ctx.fillStyle='#1a0808'; ctx.fillRect(x,y,w,h);
+    ctx.fillStyle='#2d1010'; ctx.fillRect(x+2,y+2,w-4,h-4);
+    ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(9,CELL*0.38)}px Courier New`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('☪ TEHRAN HQ',x+w/2,y+h*0.5);
+  }
 }
 
+// ═══════════════════════════════════════════════════
+//  DRAW — FLOATING SCORES + OVERLAY
+// ═══════════════════════════════════════════════════
 function drawFloats() {
   ctx.font=`bold ${Math.max(12,CELL*0.42)}px Courier New`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  for(const f of floats) {
+  for(const f of floats){
     ctx.globalAlpha=f.alpha; ctx.fillStyle='#FFD700'; ctx.fillText(f.text,f.x,f.y);
   }
   ctx.globalAlpha=1;
@@ -820,8 +818,8 @@ function drawFloats() {
 
 function drawOverlay() {
   const W=COLS*CELL, H=ROWS*CELL;
-  if(gameState==='start') {
-    ctx.fillStyle='rgba(0,0,17,0.72)'; ctx.fillRect(0,0,W,H);
+  if (gameState==='start') {
+    ctx.fillStyle='rgba(0,0,17,0.78)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
     ctx.fillStyle='#8B00FF'; ctx.font=`bold ${Math.max(16,CELL*0.65)}px Courier New`;
     ctx.fillText('🎭 TASCHEN-MAN',W/2,H/2-H*0.18);
@@ -834,7 +832,7 @@ function drawOverlay() {
     ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(10,CELL*0.35)}px Courier New`;
     ctx.fillText('🕊️ This Purim, the people fight back 🕊️',W/2,H/2+H*0.17);
   }
-  if(gameState==='gameover') {
+  if (gameState==='gameover') {
     ctx.fillStyle='rgba(0,0,17,0.82)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
     ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(20,CELL*0.82)}px Courier New`;
@@ -847,10 +845,54 @@ function drawOverlay() {
 }
 
 // ═══════════════════════════════════════════════════
+//  DRAW — LOADING SCREEN
+// ═══════════════════════════════════════════════════
+function drawLoading() {
+  const W=COLS*CELL, H=ROWS*CELL;
+  ctx.fillStyle='#000011'; ctx.fillRect(0,0,W,H);
+  const pct=assetsTotal>0?assetsLoaded/assetsTotal:0;
+  ctx.fillStyle='#222'; ctx.fillRect(W*0.15,H/2-8,W*0.7,16);
+  ctx.fillStyle='#8B00FF'; ctx.fillRect(W*0.15,H/2-8,W*0.7*pct,16);
+  ctx.fillStyle='#ffd700'; ctx.font=`${Math.max(12,CELL*0.45)}px Courier New`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`Loading… ${Math.floor(pct*100)}%`,W/2,H/2-28);
+}
+
+// ═══════════════════════════════════════════════════
+//  CANVAS BUILDING FALLBACKS (kept for safety)
+// ═══════════════════════════════════════════════════
+function drawBuildingCanvas(type, x, y) {
+  const s=CELL;
+  ctx.save(); ctx.translate(x,y);
+  const colors=['#5c3420','#6b2a18','#2a3e1a','#1a2a48','#4a3a28','#2a2222'];
+  ctx.fillStyle=colors[type%colors.length]; ctx.fillRect(0,0,s,s);
+  ctx.fillStyle='#ffe070';
+  ctx.fillRect(s*0.15,s*0.35,s*0.28,s*0.22);
+  ctx.fillRect(s*0.57,s*0.35,s*0.28,s*0.22);
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN DRAW
+// ═══════════════════════════════════════════════════
+function draw() {
+  if (!assetsReady) { drawLoading(); return; }
+  ctx.fillStyle='#000011'; ctx.fillRect(0,0,COLS*CELL,ROWS*CELL);
+  drawMaze();
+  drawHQBuilding();
+  drawDots();
+  drawTrapDoor();
+  if(gameState!=='dead') drawPlayer();
+  officials.forEach(drawOfficial);
+  drawFloats();
+  drawOverlay();
+}
+
+// ═══════════════════════════════════════════════════
 //  LOOP
 // ═══════════════════════════════════════════════════
 function loop() {
-  if(gameState==='playing') update();
+  if(assetsReady && gameState==='playing') update();
   draw();
   requestAnimationFrame(loop);
 }
