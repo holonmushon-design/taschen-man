@@ -20,17 +20,20 @@ body {
   overflow: hidden;
 }
 #hud {
-  display: flex; gap: 20px; align-items: center;
-  color: #fff; font-size: 10px;
-  margin-bottom: 6px;
+  display: flex; gap: 24px; align-items: center;
+  color: #fff; font-size: 13px;
+  margin-bottom: 8px;
 }
+#hud img { width: 24px; height: 24px; }
 #sound-btn {
   background: none; border: 1px solid #555; border-radius: 4px;
-  color: #ccc; font-size: 9px; cursor: pointer; padding: 3px 8px;
+  color: #ccc; font-size: 12px; cursor: pointer; padding: 4px 10px;
   font-family: 'Press Start 2P', monospace;
+  display: flex; align-items: center; gap: 6px;
 }
+#sound-btn img { width: 24px; height: 24px; }
 #sound-btn:hover { border-color: #ffd700; color: #ffd700; }
-#title { color: #8B00FF; font-size: 13px; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 12px #8B00FF; }
+#title { color: #8B00FF; font-size: 18px; letter-spacing: 3px; margin-bottom: 8px; text-shadow: 0 0 12px #8B00FF; }
 canvas { display: block; image-rendering: pixelated; }
 #msg { color: #FFD700; font-size: 16px; font-family: 'VT323', monospace; margin-top: 5px; height: 20px; text-align: center; letter-spacing: 1px; }
 
@@ -109,12 +112,13 @@ canvas { display: block; image-rendering: pixelated; }
 </style>
 </head>
 <body>
-<div id="title">🎭 TASCHEN-MAN — MOSSAD EDITION</div>
+<div id="title">TASCHEN-MAN — MOSSAD EDITION</div>
 <div id="hud">
   <span>SCORE: <span id="score">0</span></span>
-  <span>❤️ <span id="lives">3</span></span>
+  <span>HI: <span id="hiscore">0</span></span>
+  <span><img id="heart-icon" src="assets/icons/heart_00.png" style="width:13px;height:13px;image-rendering:pixelated;vertical-align:middle"> <span id="lives">3</span></span>
   <span>LEVEL: <span id="level">1</span></span>
-  <button id="sound-btn" onclick="toggleSound()">🔊 ON</button>
+  <button id="sound-btn" onclick="toggleSound()"><img id="sound-icon" src="assets/icons/sound_on_00.png" style="image-rendering:pixelated"> <span id="sound-label">ON</span></button>
 </div>
 <div id="game-wrap">
   <div id="comic-panel">
@@ -160,11 +164,29 @@ const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
 const UP={dx:0,dy:-1}, DOWN={dx:0,dy:1}, LEFT={dx:-1,dy:0}, RIGHT={dx:1,dy:0};
 const DIRS=[UP,DOWN,LEFT,RIGHT];
 
-const scoreEl=document.getElementById('score');
-const livesEl=document.getElementById('lives');
-const levelEl=document.getElementById('level');
-const msgEl  =document.getElementById('msg');
-const bgm    =document.getElementById('bgm');
+const scoreEl  =document.getElementById('score');
+const hiscoreEl=document.getElementById('hiscore');
+const livesEl  =document.getElementById('lives');
+const levelEl  =document.getElementById('level');
+const msgEl    =document.getElementById('msg');
+const bgm      =document.getElementById('bgm');
+
+function loadBoard() {
+  try { return JSON.parse(localStorage.getItem('taschenBoard')) || []; }
+  catch(e) { return []; }
+}
+function saveToBoard(name, sc) {
+  leaderboard.push({name, score: sc});
+  leaderboard.sort((a,b) => b.score - a.score);
+  leaderboard = leaderboard.slice(0, 3);
+  localStorage.setItem('taschenBoard', JSON.stringify(leaderboard));
+}
+function boardQualifies(sc) {
+  return leaderboard.length < 3 || sc > leaderboard[leaderboard.length-1].score;
+}
+function topScore() {
+  return leaderboard.length ? leaderboard[0].score : 0;
+}
 
 // ═══════════════════════════════════════════════════
 //  MAZE
@@ -243,6 +265,10 @@ const SPRITE_DEFS = [
   ['portrait_basij_scared',     'assets/portraits/basij_scared',       1],
   ['portrait_female_chase',     'assets/portraits/female_chase',       1],
   ['portrait_female_scared',    'assets/portraits/female_scared',      1],
+  ['icon_heart',    'assets/icons/heart',     1],
+  ['icon_skull',    'assets/icons/skull',     1],
+  ['icon_sound_on', 'assets/icons/sound_on',  1],
+  ['icon_sound_off','assets/icons/sound_off', 1],
 ];
 
 function loadSprites() {
@@ -347,6 +373,8 @@ function drawEntitySprite(charType, state, dir, cx, cy) {
 // ═══════════════════════════════════════════════════
 let maze, score, lives, level;
 let gameState;
+let leaderboard = [];
+let initialsEntry = '';
 let dotsLeft, pilotTimer, multKill, animFrame;
 let player, officials;
 const floats = [];
@@ -362,19 +390,19 @@ let comicNextChar = 0;    // cycle through characters in order
 
 const COMIC_PHRASES = {
   ayatollah: {
-    chase:  ["Death to the Zionist agent!","You cannot hide from Allah's will!","The revolution will find you!","I have been waiting for this moment...","Surrender and we may be merciful. Maybe."],
+    chase:  ["Death to the Zionist agent!","You cannot hide from Allah's will!","The revolution will find you!","I have been waiting for this moment...","Surrender and we may be merciful. Maybe.","Behold! The Great Satan… now featuring microtransactions.","I declare a fatwa against your imperialistic high score!","This is the Zionist entity's latest plot: collecting dots.","Your joystick is colonialism with extra buttons!","In the name of muqawama — I ban fun!","Down with imperialism! Up with my leaderboard!","You cannot power-up — only I may upgrade the narrative!"],
     scared: ["WAIT— what is that noise?!","GUARDS! GUARDS!!","This was NOT in the prophecy!","My turban!! MY TURBAN!!","MAMA!!!"],
   },
   guard: {
-    chase:  ["Halt! By order of the IRGC!","I get a promotion for catching you!","My commander is watching — don't embarrass me.","I had you in my sights... almost...","You are making my shift very difficult."],
+    chase:  ["Halt! By order of the IRGC!","I get a promotion for catching you!","My commander is watching — don't embarrass me.","I had you in my sights... almost...","You are making my shift very difficult.","Halt! You are violating Article 7: anti-imperialist loitering!","Present your ID… and your stance on colonialism!","This corridor is secured against Zionist entity dot-theft!","You are under arrest for weaponizing muqawama incorrectly.","By order of the Great Satan… wait — wrong script!","No running! Running looks like imperialism!","You can't escape surveillance — my CCTV is emotionally invested."],
     scared: ["ABORT ABORT ABORT!!","Nobody told me about a JET!","I did NOT sign up for this!","My rifle is jammed and I am RUNNING!","RETREAT! Strategic retreat!!"],
   },
   basij: {
-    chase:  ["VROOM VROOM — you cannot outrun my motorcycle!","The streets belong to the Basij!","I have chased better spies than you!","My motorcycle never fails me!","You think you can escape Tehran traffic?!"],
+    chase:  ["VROOM VROOM — you cannot outrun my motorcycle!","The streets belong to the Basij!","I have chased better spies than you!","My motorcycle never fails me!","You think you can escape Tehran traffic?!","Stop! I'm the frontline of muqawama… probably.","I will defeat the Great Satan as soon as I find the map!","Your speed is suspiciously imperialist.","I'm here to oppose colonialism — starting with your shortcuts!","The Little Satan fears me! (Also, corners. Corners are hard.)","Hands up! You're surrounded by… my enthusiasm!","I'm not chasing you — I'm conducting tactical resistance cardio!"],
     scared: ["THE BIKE WON'T START!!","EVERY MAN FOR HIMSELF!","Why is there a JET in the BAZAAR?!","I dropped my keys I dropped my KEYS!!","VROOM vr... vr... oh no—"],
   },
   female: {
-    chase:  ["You violated the moral code!!","I will report you to the morality police!","Stop right there, IMPERIALIST!","My committee will hear about this!","The sisterhood of the revolution is watching!"],
+    chase:  ["You violated the moral code!!","I will report you to the morality police!","Stop right there, IMPERIALIST!","My committee will hear about this!","The sisterhood of the revolution is watching!","This chase is colonialism — and I'm peer-reviewing it!","Your pathing is imperialism: expanding without consent!","I'm filing a complaint with the Department of Resistance!","Stop right there — your dots are cultural appropriation!","Did you just turbo? Typical imperialist mobility privilege.","I'm not losing — this is strategic resistance through sprinting.","The Little Satan called — he wants his patch notes back!"],
     scared: ["HARAM! This is COMPLETELY HARAM!","Someone call my husband!!","MY CHADOR!! IT'S FLYING OFF!!","This is NOT what I volunteered for!","AIIIEEEE!!!"],
   },
 };
@@ -400,7 +428,7 @@ function walkable(c,r,canHQ) {
   if(t===HQ||t===DOOR) return !!canHQ;
   return true;
 }
-function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level; }
+function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level; hiscoreEl.textContent=Math.max(topScore(), score); }
 
 function startMusic() {
   if (musicStarted) return;
@@ -410,14 +438,17 @@ function startMusic() {
 }
 
 function toggleSound() {
-  const btn = document.getElementById('sound-btn');
+  const icon  = document.getElementById('sound-icon');
+  const label = document.getElementById('sound-label');
   if (bgm.muted) {
     bgm.muted = false;
-    btn.textContent = '🔊 ON';
+    icon.src = 'assets/icons/sound_on_00.png';
+    label.textContent = 'ON';
   } else {
     bgm.muted = true;
-    btn.textContent = '🔇 OFF';
-    startMusic(); // ensure playback started so muting has effect
+    icon.src = 'assets/icons/sound_off_00.png';
+    label.textContent = 'OFF';
+    startMusic();
   }
 }
 
@@ -425,6 +456,7 @@ function toggleSound() {
 //  INIT
 // ═══════════════════════════════════════════════════
 function initGame() {
+  leaderboard = loadBoard();
   score=0; lives=3; level=1; hud();
   initLevel();
   gameState='start';
@@ -465,6 +497,21 @@ function initLevel() {
 // ═══════════════════════════════════════════════════
 document.addEventListener('keydown',e=>{
   if(!assetsReady) return;
+
+  // ── Initials entry ──────────────────────────────────
+  if (gameState==='initials') {
+    if (e.key.match(/^[a-zA-Z]$/) && initialsEntry.length < 3) {
+      initialsEntry += e.key.toUpperCase();
+    } else if (e.code==='Backspace') {
+      initialsEntry = initialsEntry.slice(0,-1);
+    } else if (e.code==='Enter'||e.code==='Space') {
+      const name = (initialsEntry + '___').slice(0,3);
+      saveToBoard(name, score);
+      gameState='gameover'; msgEl.textContent='ENTER to play again';
+    }
+    return;
+  }
+
   if (e.code==='Enter'||e.code==='Space') {
     startMusic();
     if (gameState==='start'||gameState==='dead') {
@@ -536,7 +583,7 @@ function collectDot() {
         o.dir={dx:-o.dir.dx, dy:-o.dir.dy};
       }
     });
-    msgEl.textContent='✈️ PILOT MODE! Hunt them down!';
+    msgEl.textContent='PILOT MODE! Hunt them down!';
     setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},2000);
   }
 }
@@ -659,8 +706,10 @@ function checkCollisions() {
       const catchPhrase = catchPhrases[Math.floor(Math.random()*catchPhrases.length)];
       comicPanel = { charIdx: officials.indexOf(o), mood: 'chase', key: catchKey, phrase: catchPhrase, timer: COMIC_SHOW, alpha: 1 };
       comicCooldown = COMIC_GAP;
-      if(lives<=0){gameState='gameover';msgEl.textContent='GAME OVER — ENTER to restart';}
-      else{gameState='dead';msgEl.textContent=`💀 Caught! ${lives} lives left — ENTER`;}
+      if(lives<=0){
+        if(boardQualifies(score)){ gameState='initials'; initialsEntry=''; msgEl.textContent=''; }
+        else { gameState='gameover'; msgEl.textContent='GAME OVER — ENTER to restart'; }
+      } else{gameState='dead';msgEl.innerHTML=`<img src="assets/icons/skull_00.png" style="width:22px;height:22px;image-rendering:pixelated;vertical-align:middle"> Caught! ${lives} lives left — ENTER`;}
       return;
     }
   }
@@ -1056,31 +1105,74 @@ function drawFloats() {
   ctx.globalAlpha=1;
 }
 
+function drawLeaderboard(cx, topY) {
+  const sz = Math.max(18, CELL*0.65);
+  ctx.textAlign='center';
+  ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(11,CELL*0.42)}px 'Press Start 2P'`;
+  ctx.fillText('— HIGH SCORES —', cx, topY);
+  const rankLabels = ['1.','2.','3.'];
+  const rankColors = ['#FFD700','#aaaaaa','#cd7f32'];
+  ctx.font=`${sz}px 'VT323'`;
+  if (!leaderboard.length) {
+    ctx.fillStyle='#666'; ctx.fillText('No scores yet', cx, topY + sz*1.3);
+    return;
+  }
+  leaderboard.forEach((e,i) => {
+    ctx.fillStyle = rankColors[i];
+    ctx.fillText(`${rankLabels[i]}  ${e.name}  ${e.score}`, cx, topY + sz*(i+1)*1.25);
+  });
+}
+
 function drawOverlay() {
   const W=COLS*CELL, H=ROWS*CELL;
   if (gameState==='start') {
     ctx.fillStyle='rgba(0,0,17,0.78)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
     ctx.fillStyle='#8B00FF'; ctx.font=`${Math.max(12,CELL*0.5)}px 'Press Start 2P'`;
-    ctx.fillText('🎭 TASCHEN-MAN',W/2,H/2-H*0.18);
+    ctx.fillText('TASCHEN-MAN',W/2,H*0.12);
     ctx.fillStyle='#aaaaff'; ctx.font=`${Math.max(20,CELL*0.7)}px 'VT323'`;
-    ctx.fillText('You are a Mossad operative in Tehran.',W/2,H/2-H*0.09);
-    ctx.fillText('Follow the Hamantaschen left by the resistance.',W/2,H/2-H*0.04);
-    ctx.fillText('Grab 🎭 → trap door opens → pilot mode!',W/2,H/2+H*0.01);
+    ctx.fillText('You are a Mossad operative in Tehran.',W/2,H*0.22);
+    ctx.fillText('Follow the Hamantaschen left by the resistance.',W/2,H*0.27);
+    ctx.fillText('Grab the mask → trap door opens → pilot mode!',W/2,H*0.32);
     ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
-    ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H/2+H*0.10);
+    ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H*0.41);
+    drawLeaderboard(W/2, H*0.52);
     ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
-    ctx.fillText('🕊️ This Purim, the people fight back 🕊️',W/2,H/2+H*0.17);
+    ctx.fillText('This Purim, the people fight back.',W/2,H*0.93);
   }
   if (gameState==='gameover') {
-    ctx.fillStyle='rgba(0,0,17,0.82)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(0,0,17,0.88)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
     ctx.fillStyle='#ff3333'; ctx.font=`${Math.max(14,CELL*0.55)}px 'Press Start 2P'`;
-    ctx.fillText('GAME OVER',W/2,H/2-H*0.08);
+    ctx.fillText('GAME OVER',W/2,H*0.14);
     ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(22,CELL*0.8)}px 'VT323'`;
-    ctx.fillText(`Final Score: ${score}`,W/2,H/2+H*0.04);
+    ctx.fillText(`Final Score: ${score}`,W/2,H*0.24);
+    drawLeaderboard(W/2, H*0.35);
     ctx.fillStyle='#fff'; ctx.font=`${Math.max(20,CELL*0.7)}px 'VT323'`;
-    ctx.fillText('ENTER to play again',W/2,H/2+H*0.13);
+    ctx.fillText('ENTER to play again',W/2,H*0.92);
+  }
+  if (gameState==='initials') {
+    ctx.fillStyle='rgba(0,0,17,0.88)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(13,CELL*0.5)}px 'Press Start 2P'`;
+    ctx.fillText('NEW HIGH SCORE!',W/2,H*0.18);
+    ctx.fillStyle='#fff'; ctx.font=`${Math.max(22,CELL*0.8)}px 'VT323'`;
+    ctx.fillText(`Score: ${score}`,W/2,H*0.28);
+    ctx.fillStyle='#aaaaff'; ctx.font=`${Math.max(13,CELL*0.48)}px 'Press Start 2P'`;
+    ctx.fillText('ENTER YOUR INITIALS',W/2,H*0.42);
+    // Draw 3 letter slots
+    const slotW=CELL*1.6, gap=CELL*0.5, totalW=slotW*3+gap*2;
+    const sx=W/2-totalW/2, sy=H*0.52;
+    for(let i=0;i<3;i++){
+      const x=sx+i*(slotW+gap);
+      ctx.strokeStyle=(i===initialsEntry.length)?'#FFD700':'#555';
+      ctx.lineWidth=2;
+      ctx.strokeRect(x, sy, slotW, CELL*1.8);
+      ctx.fillStyle='#fff'; ctx.font=`bold ${Math.max(24,CELL*0.9)}px 'Press Start 2P'`;
+      ctx.fillText(initialsEntry[i]||'_', x+slotW/2, sy+CELL*1.3);
+    }
+    ctx.fillStyle='#888'; ctx.font=`${Math.max(16,CELL*0.6)}px 'VT323'`;
+    ctx.fillText('type 3 letters  ·  BACKSPACE to delete  ·  ENTER to confirm',W/2,H*0.78);
   }
 }
 
