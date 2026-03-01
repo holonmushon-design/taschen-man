@@ -49,7 +49,7 @@ canvas { display: block; image-rendering: pixelated; }
 // ═══════════════════════════════════════════════════
 //  SCREEN SETUP
 // ═══════════════════════════════════════════════════
-const COLS = 19, ROWS = 21;
+const COLS = 20, ROWS = 20;
 const DPR  = window.devicePixelRatio || 1;
 const avH  = Math.min(window.innerHeight - 80, 780);
 const avW  = window.innerWidth - 20;
@@ -89,27 +89,26 @@ const bgm    =document.getElementById('bgm');
 //  MAZE
 // ═══════════════════════════════════════════════════
 const BASE = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
-  [1,0,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,0,1],
-  [1,2,1,1,0,1,1,0,0,1,0,0,1,1,0,1,1,2,1],
-  [1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,1,1,0,1,1,0,1,0,0,0,1,0,1,1,0,0,1],
-  [1,0,1,1,0,1,1,0,1,5,5,5,1,0,1,1,0,0,1],
-  [1,0,0,0,0,0,0,0,1,4,4,4,1,0,0,0,0,0,1],
-  [3,3,3,3,0,1,1,0,1,4,4,4,1,0,1,1,0,3,3],
-  [1,1,1,1,0,1,1,0,1,4,4,4,1,0,1,1,0,1,1],
-  [1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1],
-  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1],
-  [1,0,1,1,0,1,1,0,0,0,1,0,0,0,1,1,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1],
-  [1,2,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,2,1],
-  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
-  [1,0,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,0,1],
-  [1,0,1,1,0,1,1,0,1,3,3,3,1,0,1,1,0,0,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // row 0
+  [1,2,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,2,1],  // row 1
+  [1,1,1,1,1,1,0,1,0,0,1,0,1,0,1,1,1,1,1,1],  // row 2
+  [1,0,0,0,0,0,0,1,0,0,1,0,1,0,0,0,0,0,0,1],  // row 3
+  [1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1],  // row 4
+  [1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1],  // row 5
+  [3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3],  // row 6  ← tunnel
+  [1,1,1,1,1,1,0,1,1,5,5,5,1,0,1,1,1,1,1,1],  // row 7  ← DOOR at 9-11
+  [1,0,0,1,0,1,0,4,4,4,4,4,4,0,0,2,0,1,0,1],  // row 8
+  [1,0,0,2,0,0,0,4,4,4,4,4,4,0,0,1,0,0,0,1],  // row 9
+  [1,1,1,1,1,1,0,4,4,4,4,4,4,0,0,1,1,1,1,1],  // row 10
+  [3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3],  // row 11 ← tunnel
+  [1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1],  // row 12
+  [1,0,0,0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,0,1],  // row 13
+  [1,0,1,0,0,1,0,1,0,1,0,0,1,0,1,1,1,1,0,1],  // row 14
+  [1,0,1,1,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,1],  // row 15
+  [1,0,1,0,0,1,0,1,0,1,0,0,1,0,0,0,0,0,0,1],  // row 16
+  [1,0,1,0,0,1,0,1,0,1,0,0,1,0,1,1,1,1,1,1],  // row 17
+  [1,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,2,1],  // row 18
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  // row 19
 ];
 
 // ═══════════════════════════════════════════════════
@@ -324,20 +323,20 @@ function initLevel() {
   maze.forEach(r=>r.forEach(v=>{if(v===DOT||v===MASK)dotsLeft++;}));
   pilotTimer=0; multKill=0; animFrame=0; floats.length=0; trap=null;
 
-  const ps=ctr(10,19);
+  const ps=ctr(10,18);
   player={
     x:ps.x, y:ps.y,
     dir:LEFT, nextDir:LEFT,
     pilotMode:false, visible:true,
     mouth:0.2, mouthDir:1,
-    trapCol:10, trapRow:19,
+    trapCol:10, trapRow:18,
   };
 
   const starts=[
     {c:4,  r:1,  dir:RIGHT, color:'#cc2200', face:'😠'},
     {c:14, r:1,  dir:LEFT,  color:'#cc6600', face:'😡'},
     {c:1,  r:14, dir:RIGHT, color:'#005c3a', face:'🤬'},
-    {c:17, r:14, dir:LEFT,  color:'#550066', face:'😤'},
+    {c:18, r:14, dir:LEFT,  color:'#550066', face:'😤'},
   ];
   officials=starts.map((s,i)=>{
     const p=ctr(s.c,s.r);
@@ -552,8 +551,17 @@ function update() {
     if (pilotTimer===0) {
       player.pilotMode=false;
       officials.forEach(o=>{if(o.state==='scared')o.state='chase';});
-      if(trap){trap.phase='closing';trap.frame=0;trap.maxFrames=24;}
-      else{player.visible=true;}
+      if(trap){
+        // Emerge where the jet is now, not where it entered
+        const ec=col(player.x), er=row(player.y);
+        const candidates=[[ec,er],[ec-1,er],[ec+1,er],[ec,er-1],[ec,er+1]];
+        for(const [cc,cr] of candidates){
+          if(cc>=0&&cc<COLS&&cr>=0&&cr<ROWS&&walkable(cc,cr,false)){
+            trap.col=cc; trap.row=cr; break;
+          }
+        }
+        trap.phase='closing'; trap.frame=0; trap.maxFrames=24;
+      } else{player.visible=true;}
       msgEl.textContent='⚠️ Plane left — operative back on ground!';
       setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},2000);
     }
@@ -573,11 +581,12 @@ function update() {
 // ═══════════════════════════════════════════════════
 function drawMaze() {
   // --- Floor tiles on all path cells ---
-  const tileArr = SP['tiles'];
+  // Exclude tile 03 (near-white) — use only grayish ones
+  const tileArr = (SP['tiles']||[]).filter((_,i)=>i!==3);
   for (let r=0;r<ROWS;r++) {
     for (let c=0;c<COLS;c++) {
       if (maze[r][c]===WALL) continue;
-      if (tileArr && tileArr.length) {
+      if (tileArr.length) {
         const ti = (r*3 + c*7) % tileArr.length;
         ctx.drawImage(tileArr[ti], c*CELL, r*CELL, CELL, CELL);
       }
@@ -590,7 +599,7 @@ function drawMaze() {
   for (let r=0;r<ROWS;r++) {
     for (let c=0;c<COLS;c++) {
       if (maze[r][c]!==WALL) continue;
-      if (r>=7&&r<=10&&c>=8&&c<=12) continue; // HQ drawn separately
+      if (r>=7&&r<=10&&c>=7&&c<=12) continue;
       // Centre the oversized building on the cell centre
       const cx = c*CELL + CELL/2;
       const cy = r*CELL + CELL/2;
@@ -807,19 +816,17 @@ function drawOfficial(o) {
 //  DRAW — HQ BUILDING (canvas)
 // ═══════════════════════════════════════════════════
 function drawHQBuilding() {
-  // HQ area: cols 8–12, rows 7–10 → 5 cells wide × 4 cells tall
-  const x = 8*CELL, y = 7*CELL, w = 5*CELL, h = 4*CELL;
+  // HQ area: cols 7–12, rows 7–10 → 6 cells wide × 4 cells tall
+  const x = 7*CELL, y = 7*CELL, w = 6*CELL, h = 4*CELL;
+  // Gray tile base behind the palace (transparent parts show through)
+  const baseTile = SP['tiles'] && SP['tiles'][0];
+  if (baseTile) {
+    for (let dr=0;dr<4;dr++) for (let dc=0;dc<6;dc++)
+      ctx.drawImage(baseTile, x+dc*CELL, y+dr*CELL, CELL, CELL);
+  }
   const compound = SP['compound'] && SP['compound'][0];
   if (compound) {
-    // Draw the compound sprite scaled to fill the full HQ block
     ctx.drawImage(compound, x, y, w, h);
-    // Overlay label so it reads clearly in-game
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x, y, w, CELL*0.55);
-    ctx.fillStyle = '#ff4444';
-    ctx.font = `bold ${Math.max(9, CELL*0.38)}px Courier New`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('☪ TEHRAN HQ', x+w/2, y+CELL*0.28);
   } else {
     // Canvas fallback
     ctx.fillStyle='#1a0808'; ctx.fillRect(x,y,w,h);
