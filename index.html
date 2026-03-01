@@ -18,10 +18,16 @@ body {
   overflow: hidden;
 }
 #hud {
-  display: flex; gap: 28px;
+  display: flex; gap: 28px; align-items: center;
   color: #fff; font-size: 14px; font-weight: bold;
   margin-bottom: 4px;
 }
+#sound-btn {
+  background: none; border: 1px solid #555; border-radius: 4px;
+  color: #ccc; font-size: 13px; cursor: pointer; padding: 2px 8px;
+  font-family: 'Courier New', monospace;
+}
+#sound-btn:hover { border-color: #ffd700; color: #ffd700; }
 #title { color: #8B00FF; font-size: 18px; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 0 10px #8B00FF; }
 canvas { display: block; image-rendering: pixelated; }
 #msg { color: #FFD700; font-size: 13px; margin-top: 5px; height: 18px; text-align: center; }
@@ -33,6 +39,7 @@ canvas { display: block; image-rendering: pixelated; }
   <span>SCORE: <span id="score">0</span></span>
   <span>❤️ <span id="lives">3</span></span>
   <span>LEVEL: <span id="level">1</span></span>
+  <button id="sound-btn" onclick="toggleSound()">🔊 ON</button>
 </div>
 <canvas id="c"></canvas>
 <div id="msg">Loading assets…</div>
@@ -145,6 +152,7 @@ const SPRITE_DEFS = [
   ['buildings',             'assets/buildings_a/buildings_a',          6],
   ['collectibles',          'assets/collectibles/collectibles',        10],
   ['compound',              'assets/hq/compound',                      1],
+  ['tiles',                 'assets/tiles/street_tiles',               6],
 ];
 
 function loadSprites() {
@@ -201,15 +209,14 @@ function sprAnim(key, cx, cy, flip=false, speed=7) {
 // charType: 'player'|'ayatollah'|'guard'|'basij'|'female'
 // state:    'normal'|'scared'
 function drawEntitySprite(charType, state, dir, cx, cy) {
-  const isRight = (dir===RIGHT);
-  const flip    = isRight;
+  const flip = (dir===LEFT);
   const speed   = 7;
 
   // ── Ayatollah has per-direction sprite sets ──────────────────────
   if (charType === 'ayatollah') {
     if (dir===LEFT || dir===RIGHT) {
       const key = state==='scared' ? 'ayatollah_scared_side' : 'ayatollah_side';
-      return sprAnim(key, cx, cy, flip, speed);
+      return sprAnim(key, cx, cy, dir===RIGHT, speed);
     }
     const key = state==='scared' ? 'ayatollah_scared' : 'ayatollah_normal';
     const arr = SP[key];
@@ -245,9 +252,9 @@ function drawEntitySprite(charType, state, dir, cx, cy) {
     return true;
   }
 
-  // ── All other enemies: cycle all frames, flip for RIGHT ───────────
+  // ── All other enemies: sprites face LEFT natively, flip for RIGHT ──
   const sfx = state==='scared' ? '_scared' : '_normal';
-  return sprAnim(charType+sfx, cx, cy, flip, speed);
+  return sprAnim(charType+sfx, cx, cy, dir===RIGHT, speed);
 }
 
 // ═══════════════════════════════════════════════════
@@ -287,6 +294,18 @@ function startMusic() {
   musicStarted = true;
   bgm.volume = 0.55;
   bgm.play().catch(()=>{});
+}
+
+function toggleSound() {
+  const btn = document.getElementById('sound-btn');
+  if (bgm.muted) {
+    bgm.muted = false;
+    btn.textContent = '🔊 ON';
+  } else {
+    bgm.muted = true;
+    btn.textContent = '🔇 OFF';
+    startMusic(); // ensure playback started so muting has effect
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -553,8 +572,20 @@ function update() {
 //  DRAW — MAZE (building sprites)
 // ═══════════════════════════════════════════════════
 function drawMaze() {
+  // --- Floor tiles on all path cells ---
+  const tileArr = SP['tiles'];
+  for (let r=0;r<ROWS;r++) {
+    for (let c=0;c<COLS;c++) {
+      if (maze[r][c]===WALL) continue;
+      if (tileArr && tileArr.length) {
+        const ti = (r*3 + c*7) % tileArr.length;
+        ctx.drawImage(tileArr[ti], c*CELL, r*CELL, CELL, CELL);
+      }
+    }
+  }
+
   const buildArr = SP['buildings'];
-  const BS = CELL * 1.6; // building draw size — bigger than one cell for city density
+  const BS = CELL; // buildings fill exactly one cell, matching tile size
   // Draw top-to-bottom so lower buildings render on top (slight perspective)
   for (let r=0;r<ROWS;r++) {
     for (let c=0;c<COLS;c++) {
@@ -572,12 +603,7 @@ function drawMaze() {
       drawBuildingCanvas(bType[r][c], x, y, BS);
     }
   }
-  // Tunnel overlay
-  for(let c=0;c<COLS;c++) {
-    if(maze[9][c]===EMPTY&&(c<4||c>=COLS-2)) {
-      ctx.fillStyle='#001133'; ctx.fillRect(c*CELL,9*CELL,CELL,CELL);
-    }
-  }
+
 }
 
 // ═══════════════════════════════════════════════════
