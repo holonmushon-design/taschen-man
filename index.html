@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <title>Taschen-Man 🎭</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,24 +15,24 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  font-family: 'Courier New', monospace;
+  font-family: 'Press Start 2P', monospace;
   user-select: none;
   overflow: hidden;
 }
 #hud {
-  display: flex; gap: 28px; align-items: center;
-  color: #fff; font-size: 14px; font-weight: bold;
-  margin-bottom: 4px;
+  display: flex; gap: 20px; align-items: center;
+  color: #fff; font-size: 10px;
+  margin-bottom: 6px;
 }
 #sound-btn {
   background: none; border: 1px solid #555; border-radius: 4px;
-  color: #ccc; font-size: 13px; cursor: pointer; padding: 2px 8px;
-  font-family: 'Courier New', monospace;
+  color: #ccc; font-size: 9px; cursor: pointer; padding: 3px 8px;
+  font-family: 'Press Start 2P', monospace;
 }
 #sound-btn:hover { border-color: #ffd700; color: #ffd700; }
-#title { color: #8B00FF; font-size: 18px; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 0 10px #8B00FF; }
+#title { color: #8B00FF; font-size: 13px; letter-spacing: 3px; margin-bottom: 6px; text-shadow: 0 0 12px #8B00FF; }
 canvas { display: block; image-rendering: pixelated; }
-#msg { color: #FFD700; font-size: 13px; margin-top: 5px; height: 18px; text-align: center; }
+#msg { color: #FFD700; font-size: 16px; font-family: 'VT323', monospace; margin-top: 5px; height: 20px; text-align: center; letter-spacing: 1px; }
 </style>
 </head>
 <body>
@@ -94,14 +96,14 @@ const BASE = [
   [1,1,1,1,1,1,0,1,0,0,1,0,1,0,1,1,1,1,1,1],  // row 2
   [1,0,0,0,0,0,0,1,0,0,1,0,1,0,0,0,0,0,0,1],  // row 3
   [1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1],  // row 4
-  [1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1],  // row 5
+  [1,1,0,1,1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,1],  // row 5
   [3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3],  // row 6  ← tunnel
   [1,1,1,1,1,1,0,1,1,5,5,5,1,0,1,1,1,1,1,1],  // row 7  ← DOOR at 9-11
   [1,0,0,1,0,1,0,4,4,4,4,4,4,0,0,2,0,1,0,1],  // row 8
   [1,0,0,2,0,0,0,4,4,4,4,4,4,0,0,1,0,0,0,1],  // row 9
   [1,1,1,1,1,1,0,4,4,4,4,4,4,0,0,1,1,1,1,1],  // row 10
   [3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3],  // row 11 ← tunnel
-  [1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1],  // row 12
+  [1,0,1,1,1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,1],  // row 12
   [1,0,0,0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,0,1],  // row 13
   [1,0,1,0,0,1,0,1,0,1,0,0,1,0,1,1,1,1,0,1],  // row 14
   [1,0,1,1,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,1],  // row 15
@@ -844,7 +846,7 @@ function drawHQBuilding() {
     // Canvas fallback
     ctx.fillStyle='#1a0808'; ctx.fillRect(x,y,w,h);
     ctx.fillStyle='#2d1010'; ctx.fillRect(x+2,y+2,w-4,h-4);
-    ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(9,CELL*0.38)}px Courier New`;
+    ctx.fillStyle='#ff3333'; ctx.font=`${Math.max(14,CELL*0.5)}px 'VT323'`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('☪ TEHRAN HQ',x+w/2,y+h*0.5);
   }
@@ -854,7 +856,7 @@ function drawHQBuilding() {
 //  DRAW — FLOATING SCORES + OVERLAY
 // ═══════════════════════════════════════════════════
 function drawFloats() {
-  ctx.font=`bold ${Math.max(12,CELL*0.42)}px Courier New`;
+  ctx.font=`bold ${Math.max(16,CELL*0.55)}px 'Press Start 2P'`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   for(const f of floats){
     ctx.globalAlpha=f.alpha; ctx.fillStyle='#FFD700'; ctx.fillText(f.text,f.x,f.y);
@@ -867,25 +869,25 @@ function drawOverlay() {
   if (gameState==='start') {
     ctx.fillStyle='rgba(0,0,17,0.78)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
-    ctx.fillStyle='#8B00FF'; ctx.font=`bold ${Math.max(16,CELL*0.65)}px Courier New`;
+    ctx.fillStyle='#8B00FF'; ctx.font=`${Math.max(12,CELL*0.5)}px 'Press Start 2P'`;
     ctx.fillText('🎭 TASCHEN-MAN',W/2,H/2-H*0.18);
-    ctx.fillStyle='#aaaaff'; ctx.font=`${Math.max(11,CELL*0.4)}px Courier New`;
+    ctx.fillStyle='#aaaaff'; ctx.font=`${Math.max(20,CELL*0.7)}px 'VT323'`;
     ctx.fillText('You are a Mossad operative in Tehran.',W/2,H/2-H*0.09);
     ctx.fillText('Follow the Hamantaschen left by the resistance.',W/2,H/2-H*0.04);
     ctx.fillText('Grab 🎭 → trap door opens → pilot mode!',W/2,H/2+H*0.01);
-    ctx.fillStyle='#FFD700'; ctx.font=`bold ${Math.max(11,CELL*0.4)}px Courier New`;
+    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
     ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H/2+H*0.10);
-    ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(10,CELL*0.35)}px Courier New`;
+    ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
     ctx.fillText('🕊️ This Purim, the people fight back 🕊️',W/2,H/2+H*0.17);
   }
   if (gameState==='gameover') {
     ctx.fillStyle='rgba(0,0,17,0.82)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
-    ctx.fillStyle='#ff3333'; ctx.font=`bold ${Math.max(20,CELL*0.82)}px Courier New`;
+    ctx.fillStyle='#ff3333'; ctx.font=`${Math.max(14,CELL*0.55)}px 'Press Start 2P'`;
     ctx.fillText('GAME OVER',W/2,H/2-H*0.08);
-    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(13,CELL*0.48)}px Courier New`;
+    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(22,CELL*0.8)}px 'VT323'`;
     ctx.fillText(`Final Score: ${score}`,W/2,H/2+H*0.04);
-    ctx.fillStyle='#fff'; ctx.font=`${Math.max(11,CELL*0.4)}px Courier New`;
+    ctx.fillStyle='#fff'; ctx.font=`${Math.max(20,CELL*0.7)}px 'VT323'`;
     ctx.fillText('ENTER to play again',W/2,H/2+H*0.13);
   }
 }
@@ -899,7 +901,7 @@ function drawLoading() {
   const pct=assetsTotal>0?assetsLoaded/assetsTotal:0;
   ctx.fillStyle='#222'; ctx.fillRect(W*0.15,H/2-8,W*0.7,16);
   ctx.fillStyle='#8B00FF'; ctx.fillRect(W*0.15,H/2-8,W*0.7*pct,16);
-  ctx.fillStyle='#ffd700'; ctx.font=`${Math.max(12,CELL*0.45)}px Courier New`;
+  ctx.fillStyle='#ffd700'; ctx.font=`${Math.max(10,CELL*0.38)}px 'Press Start 2P'`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(`Loading… ${Math.floor(pct*100)}%`,W/2,H/2-28);
 }
