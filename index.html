@@ -653,6 +653,12 @@ function checkCollisions() {
       o.state='return'; o.dir=UP;
     } else if(!player.pilotMode&&o.state==='chase'&&player.visible) {
       lives--; hud();
+      // Show the catcher's portrait immediately
+      const catchKey = CHAR_KEYS[o.pers];
+      const catchPhrases = COMIC_PHRASES[catchKey].chase;
+      const catchPhrase = catchPhrases[Math.floor(Math.random()*catchPhrases.length)];
+      comicPanel = { charIdx: officials.indexOf(o), mood: 'chase', key: catchKey, phrase: catchPhrase, timer: COMIC_SHOW, alpha: 1 };
+      comicCooldown = COMIC_GAP;
       if(lives<=0){gameState='gameover';msgEl.textContent='GAME OVER — ENTER to restart';}
       else{gameState='dead';msgEl.textContent=`💀 Caught! ${lives} lives left — ENTER`;}
       return;
@@ -707,6 +713,7 @@ function update() {
   for(let i=floats.length-1;i>=0;i--){floats[i].y-=1;floats[i].alpha-=0.02;if(floats[i].alpha<=0)floats.splice(i,1);}
 
   // ── Comic panel lifecycle ──────────────────────────
+  if (gameState !== 'playing') return;
   if (comicPanel) {
     comicPanel.timer--;
     const fadeFrames = 30;
