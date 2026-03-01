@@ -147,6 +147,8 @@ const SPRITE_DEFS = [
   ['basij_scared',          'assets/enemies/basij_scared',             8],
   ['female_normal',         'assets/enemies/female_normal',            8],
   ['female_scared',         'assets/enemies/female_scared',            6],   // gap at 03
+  ['trapdoor_enter',         'assets/trapdoor/trapdoor_enter',          4],
+  ['trapdoor_exit',          'assets/trapdoor/trapdoor_exit',           4],
   ['jet',                   'assets/jet/jet',                          4],
   ['buildings',             'assets/buildings_a/buildings_a',          6],
   ['collectibles',          'assets/collectibles/collectibles',        10],
@@ -236,12 +238,7 @@ function drawEntitySprite(charType, state, dir, cx, cy) {
   if (charType === 'player') {
     const arr = SP['player'];
     if (!arr || !arr.length) return false;
-    let subset;
-    if      (dir===DOWN)          subset = [arr[0],arr[1]].filter(Boolean);
-    else if (dir===UP)            subset = [arr[4]].filter(Boolean);
-    else /* LEFT or RIGHT */      subset = [arr[5],arr[6]].filter(Boolean);
-    if (!subset.length) subset = arr;
-    const img = subset[Math.floor(animFrame/speed) % subset.length];
+    const img = arr[Math.floor(animFrame/speed) % arr.length];
     if (!img) return false;
     const s=CELL;
     ctx.save(); ctx.translate(cx-s/2,cy-s/2);
@@ -664,26 +661,30 @@ function drawTrapDoor() {
   if (!trap) return;
   const tx=trap.col*CELL, ty=trap.row*CELL, s=CELL;
   const progress=trap.frame/trap.maxFrames;
+
+  if (trap.phase==='opening') {
+    const arr=SP['trapdoor_enter'];
+    if (arr && arr.length) {
+      const fi=Math.min(Math.floor(progress*arr.length), arr.length-1);
+      ctx.drawImage(arr[fi], tx, ty, s, s);
+      return;
+    }
+  } else if (trap.phase==='open') {
+    const arr=SP['trapdoor_enter'];
+    if (arr && arr.length) { ctx.drawImage(arr[arr.length-1], tx, ty, s, s); return; }
+  } else if (trap.phase==='closing') {
+    const arr=SP['trapdoor_exit'];
+    if (arr && arr.length) {
+      const fi=Math.min(Math.floor(progress*arr.length), arr.length-1);
+      ctx.drawImage(arr[fi], tx, ty, s, s);
+      return;
+    }
+  }
+
+  // Canvas fallback
   ctx.fillStyle='#000'; ctx.fillRect(tx,ty,s,s);
   ctx.fillStyle='#111';
   ctx.beginPath(); ctx.ellipse(tx+s/2,ty+s/2,s*0.38*Math.min(progress*2,1),s*0.22,0,0,Math.PI*2); ctx.fill();
-  if (trap.phase==='opening'||trap.phase==='closing') {
-    const openFrac=trap.phase==='opening'?progress:1-progress;
-    ctx.fillStyle='#8b4513';
-    ctx.fillRect(tx-openFrac*s*0.5,ty,s*0.5,s);
-    ctx.strokeStyle='#5c2a0a'; ctx.lineWidth=1.5;
-    ctx.strokeRect(tx-openFrac*s*0.5,ty,s*0.5,s);
-    ctx.fillRect(tx+s*0.5+openFrac*s*0.5,ty,s*0.5,s);
-    ctx.strokeRect(tx+s*0.5+openFrac*s*0.5,ty,s*0.5,s);
-    ctx.fillStyle='#ffd700';
-    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08,ty+s*0.25,s*0.05,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx-openFrac*s*0.5+s*0.08,ty+s*0.75,s*0.05,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42,ty+s*0.25,s*0.05,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx+s*0.5+openFrac*s*0.5+s*0.42,ty+s*0.75,s*0.05,0,Math.PI*2); ctx.fill();
-  } else if (trap.phase==='open') {
-    ctx.fillStyle='rgba(0,100,255,0.15)';
-    ctx.beginPath(); ctx.arc(tx+s/2,ty+s/2,s*0.4,0,Math.PI*2); ctx.fill();
-  }
 }
 
 // ═══════════════════════════════════════════════════
