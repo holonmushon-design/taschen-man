@@ -223,6 +223,10 @@ canvas { display: block; image-rendering: pixelated; }
 <audio id="bgm" src="assets/Desert_Caravan_Uprising.mp3" loop preload="auto"></audio>
 
 <script>
+window.onerror = function(msg, src, line, col, err) {
+  const dbg = document.getElementById('dbg');
+  if (dbg) dbg.textContent = `JS ERROR line ${line}: ${msg}`;
+};
 // ═══════════════════════════════════════════════════
 //  SCREEN SETUP
 // ═══════════════════════════════════════════════════
