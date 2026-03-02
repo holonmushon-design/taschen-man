@@ -856,7 +856,7 @@ function moveOfficial(o) {
       }
     } else if (o.state==='exit') {
       pickDir(o,10,6,true,false);
-      if(oc===10&&or_<=6) o.state='chase';
+      if(oc===10&&or_<=6) o.state = player.pilotMode ? 'scared' : 'chase';
     }
   }
   const spd=o.state==='scared'?SPEED_SCARED:o.state==='return'?SPEED_RETURN:SPEED_OFFICIAL;
@@ -926,7 +926,7 @@ function update() {
           return;
         }
         if(o.state==='hq')  { o.releaseTimer=0; } // exits next frame
-        // 'exit' stays as-is → becomes 'chase' naturally when it clears the door
+        if(o.state==='exit') { o.state='chase'; } // don't wait to clear door
       });
       if(trap){
         // Emerge where the jet is now, not where it entered
@@ -970,7 +970,7 @@ function update() {
     // Update mood + phrase live if state changed
     if (comicPanel) {
       const o = officials[comicPanel.charIdx];
-      const liveMood = (o && o.state==='scared') ? 'scared' : 'chase';
+      const liveMood = (player.pilotMode || (o && o.state==='scared')) ? 'scared' : 'chase';
       if (liveMood !== comicPanel.mood) {
         comicPanel.mood = liveMood;
         const phrases = COMIC_PHRASES[comicPanel.key][liveMood];
@@ -978,7 +978,9 @@ function update() {
       }
     }
   } else {
-    if (comicCooldown > 0) { comicCooldown--; }
+    // During pilot mode only show the one panel spawned at start — no new ones
+    if (player.pilotMode) { comicCooldown = COMIC_GAP; }
+    else if (comicCooldown > 0) { comicCooldown--; }
     else { spawnComicPanel(); }
   }
 }
