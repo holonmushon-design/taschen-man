@@ -110,6 +110,45 @@ canvas { display: block; image-rendering: pixelated; }
   border-bottom-color: #fffde7;
 }
 
+/* ── D-pad ───────────────────────────────────────────── */
+#dpad {
+  display: none;
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 120px;
+  height: 120px;
+  z-index: 10;
+}
+#dpad button {
+  position: absolute;
+  width: 38px; height: 38px;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,215,0,0.5);
+  border-radius: 6px;
+  color: #ffd700;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+#dpad button:active { background: rgba(255,215,0,0.35); }
+#dpad-up    { top: 0;    left: 41px; }
+#dpad-down  { bottom: 0; left: 41px; }
+#dpad-left  { top: 41px; left: 0;    }
+#dpad-right { top: 41px; right: 0;   }
+
+#rotate-hint {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(139,0,255,0.9);
+  color: #fff; text-align: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; padding: 6px;
+  z-index: 100; letter-spacing: 1px;
+}
+
 /* ── Mobile ─────────────────────────────────────────── */
 @media (max-width: 640px) {
   #title { font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
@@ -158,7 +197,14 @@ canvas { display: block; image-rendering: pixelated; }
     <div id="comic-balloon" id="comic-text">…</div>
   </div>
   <canvas id="c"></canvas>
+  <div id="dpad">
+    <button id="dpad-up">▲</button>
+    <button id="dpad-left">◀</button>
+    <button id="dpad-right">▶</button>
+    <button id="dpad-down">▼</button>
+  </div>
 </div>
+<div id="rotate-hint">⟳ ROTATE FOR A BETTER EXPERIENCE</div>
 <input id="mobile-input" type="text" maxlength="3" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="position:fixed;left:-9999px;opacity:0;pointer-events:none">
 <div id="msg">Loading assets…</div>
 <audio id="bgm" src="assets/Desert_Caravan_Uprising.mp3" loop preload="auto"></audio>
@@ -617,6 +663,27 @@ mobileInputEl.addEventListener('keydown', e => {
     mobileInputEl.blur();
   }
 });
+
+// ── D-pad + rotate hint (touch devices only) ─────────
+if ('ontouchstart' in window) {
+  const dpad = document.getElementById('dpad');
+  dpad.style.display = 'block';
+
+  function dpadDir(dir) {
+    if (gameState === 'playing') player.nextDir = dir;
+  }
+  document.getElementById('dpad-up'   ).addEventListener('touchstart', e=>{ dpadDir(UP);    e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-down' ).addEventListener('touchstart', e=>{ dpadDir(DOWN);  e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-left' ).addEventListener('touchstart', e=>{ dpadDir(LEFT);  e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-right').addEventListener('touchstart', e=>{ dpadDir(RIGHT); e.preventDefault(); }, {passive:false});
+
+  const rotateHint = document.getElementById('rotate-hint');
+  function checkOrientation() {
+    rotateHint.style.display = window.innerWidth < window.innerHeight ? 'block' : 'none';
+  }
+  window.addEventListener('resize', checkOrientation);
+  checkOrientation();
+}
 
 // ═══════════════════════════════════════════════════
 //  PLAYER MOVEMENT
@@ -1230,7 +1297,11 @@ function drawOverlay() {
     ctx.fillText('Follow the Hamantaschen left by the resistance.',W/2,H*0.27);
     ctx.fillText('Grab the mask → trap door opens → pilot mode!',W/2,H*0.32);
     ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
-    ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H*0.41);
+    if ('ontouchstart' in window) {
+      ctx.fillText('SWIPE or D-PAD to move  —  TAP to start',W/2,H*0.41);
+    } else {
+      ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H*0.41);
+    }
     drawLeaderboard(W/2, H*0.52);
     ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
     ctx.fillText('This Purim, the people fight back.',W/2,H*0.93);
