@@ -589,9 +589,9 @@ function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.t
 
 function startMusic() {
   bgm.volume = 0.55;
-  bgm.muted  = soundMuted; // always re-apply preference — survives death/gameover
-  if (!musicStarted) { musicStarted = true; }
-  bgm.play().catch(()=>{});
+  bgm.muted  = soundMuted;
+  if (!musicStarted) musicStarted = true;
+  if (!soundMuted) bgm.play().catch(()=>{}); // never call play() when muted — iOS resets muted state
 }
 
 function toggleSound() {
@@ -599,9 +599,9 @@ function toggleSound() {
   bgm.muted  = soundMuted;
   const icon  = document.getElementById('sound-icon');
   const label = document.getElementById('sound-label');
-  icon.src      = soundMuted ? 'assets/icons/sound_off_00.png' : 'assets/icons/sound_on_00.png';
+  icon.src          = soundMuted ? 'assets/icons/sound_off_00.png' : 'assets/icons/sound_on_00.png';
   label.textContent = soundMuted ? 'OFF' : 'ON';
-  if (!soundMuted) startMusic();
+  if (!soundMuted) bgm.play().catch(()=>{}); // resume on unmute
 }
 
 // ═══════════════════════════════════════════════════
