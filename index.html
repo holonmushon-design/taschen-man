@@ -561,10 +561,13 @@ function toggleSound() {
 //  INIT
 // ═══════════════════════════════════════════════════
 function initGame() {
+  const dbg = document.getElementById('dbg');
+  if (dbg) dbg.textContent = 'initGame running...';
   leaderboard = loadBoard();
   score=0; lives=3; level=1; hud();
   initLevel();
   gameState='start';
+  if (dbg) dbg.textContent = `initGame done. state=${gameState}`;
   msgEl.textContent= isMobile ? 'TAP to start' : 'Press ENTER or SPACE to start';
 }
 
