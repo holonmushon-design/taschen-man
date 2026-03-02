@@ -875,6 +875,16 @@ function detonateCharge() {
       floats.push({text:'BOOM!',x:o.x,y:o.y,alpha:1});
     }
   });
+  // Operative caught in blast — lose a life
+  if(player.visible && blast.some(([c,r])=>Math.abs(col(player.x)-c)<=1&&Math.abs(row(player.y)-r)<=1)){
+    lives--; hud();
+    floats.push({text:'OUCH!',x:player.x,y:player.y,alpha:1});
+    if(lives<=0){
+      gameState='gameover'; msgEl.textContent=`GAME OVER — ${ACT} to restart`;
+    } else {
+      gameState='dead'; msgEl.innerHTML=`<img src="assets/icons/skull_00.png" style="width:22px;height:22px;image-rendering:pixelated;vertical-align:middle"> Own goal! ${lives} lives left — ${ACT}`;
+    }
+  }
 }
 
 function renderBackpack() {
