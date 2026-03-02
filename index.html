@@ -628,8 +628,6 @@ function initLevel(keepCharge=false) {
   comicPanel=null; comicCooldown=60*5;
   bonusItem=null; bonusSpawnTimer=60*8; slowTimer=0;
   backpack=[]; gragTimer=0; costumeTimer=0; oilTimer=0; chargeObj=null; explosions.length=0;
-  // DEBUG: start with C4
-  backpack.push({ def: BONUS_DEFS.find(d=>d.key==='charge') });
   if(savedCharge) chargeObj=savedCharge;
   renderBackpack();
 
@@ -1741,25 +1739,10 @@ function drawOverlay() {
       ctx.fillText('Arrow keys / WASD  —  ENTER to start',W/2,H*0.41);
     }
 
-    // ── Backpack items guide ──────────────────────────────────────────
-    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(9,CELL*0.32)}px 'Press Start 2P'`;
-    ctx.textAlign='center';
-    ctx.fillText('BACKPACK ITEMS', W/2, H*0.47);
-
-    const guideItems = [
-      { spriteKey:'item_gragger',  frames:null,  label:'GRAG', desc:'scares all',    color:'#ff8800' },
-      { spriteKey:'item_costume',  frames:null,  label:'MASK', desc:'invisible',      color:'#9944ff' },
-      { spriteKey:'item_oil_can',  frames:null,  label:'OIL',  desc:'guards slip',    color:'#ddcc00' },
-      { spriteKey:'item_charge',   frames:null,  label:'C4',   desc:'blast & destroy',color:'#cc2222' },
-      { spriteKey:null,            frames:[6,7], label:'WINE', desc:'slows guards',   color:'#44bb44' },
-    ];
+    // ── helper: draw one item icon + label + desc ────────────────────
     const iSz = Math.max(20, CELL*0.72);
-    const step = W / (guideItems.length + 1);
-    guideItems.forEach((d, i) => {
-      const ix = step * (i + 1);
-      const iy = H*0.53;
-      // draw sprite or colored square
-      let drawn = false;
+    function drawGuideItem(d, ix, iy) {
+      let drawn=false;
       if(d.spriteKey && SP[d.spriteKey]) {
         const img=SP[d.spriteKey][0];
         if(img){ ctx.drawImage(img, ix-iSz/2, iy-iSz/2, iSz, iSz); drawn=true; }
@@ -1767,22 +1750,46 @@ function drawOverlay() {
         const img=SP['collectibles'][d.frames[0]];
         if(img){ ctx.drawImage(img, ix-iSz/2, iy-iSz/2, iSz, iSz); drawn=true; }
       }
-      if(!drawn){
-        ctx.fillStyle=d.color; ctx.fillRect(ix-iSz/2, iy-iSz/2, iSz, iSz);
-      }
-      // label
+      if(!drawn){ ctx.fillStyle=d.color; ctx.fillRect(ix-iSz/2, iy-iSz/2, iSz, iSz); }
       ctx.fillStyle=d.color; ctx.font=`${Math.max(8,CELL*0.28)}px 'Press Start 2P'`;
+      ctx.textAlign='center';
       ctx.fillText(d.label, ix, iy+iSz*0.75);
-      // description
       ctx.fillStyle='#aaaaff'; ctx.font=`${Math.max(13,CELL*0.48)}px 'VT323'`;
       ctx.fillText(d.desc, ix, iy+iSz*1.15);
-    });
+    }
 
-    ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(12,CELL*0.44)}px 'VT323'`;
+    // ── Row 1: Backpack items ─────────────────────────────────────────
+    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(9,CELL*0.32)}px 'Press Start 2P'`;
     ctx.textAlign='center';
-    ctx.fillText('⚠ GRAG · OIL · C4 cannot be used in pilot mode', W/2, H*0.645);
+    ctx.fillText('BACKPACK ITEMS  (store up to 3, use Q/W/E)', W/2, H*0.455);
 
-    drawLeaderboard(W/2, H*0.68);
+    const bagItems = [
+      { spriteKey:'item_gragger', frames:null,  label:'GRAG', desc:'scares all',     color:'#ff8800' },
+      { spriteKey:'item_costume', frames:null,  label:'MASK', desc:'invisible',       color:'#9944ff' },
+      { spriteKey:'item_oil_can', frames:null,  label:'OIL',  desc:'guards slip',     color:'#ddcc00' },
+      { spriteKey:'item_charge',  frames:null,  label:'C4',   desc:'blast+destroy',   color:'#cc2222' },
+      { spriteKey:null,           frames:[6,7], label:'WINE', desc:'slows guards',    color:'#44bb44' },
+    ];
+    const bagStep = W / (bagItems.length + 1);
+    bagItems.forEach((d,i) => drawGuideItem(d, bagStep*(i+1), H*0.505));
+
+    ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(12,CELL*0.42)}px 'VT323'`;
+    ctx.textAlign='center';
+    ctx.fillText('⚠ GRAG · OIL · C4 cannot be used in pilot mode', W/2, H*0.593);
+
+    // ── Row 2: Instant pickups ────────────────────────────────────────
+    ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(9,CELL*0.32)}px 'Press Start 2P'`;
+    ctx.textAlign='center';
+    ctx.fillText('INSTANT PICKUPS', W/2, H*0.635);
+
+    const instantItems = [
+      { spriteKey:null, frames:[2,3], label:'SCROLL', desc:`Scroll of Esther — bonus pts`, color:'#ffd700' },
+      { spriteKey:null, frames:[8,9], label:'CUP',    desc:'Wine cup — +1 life',            color:'#cc4444' },
+    ];
+    const instStep = W / (instantItems.length + 1);
+    instantItems.forEach((d,i) => drawGuideItem(d, instStep*(i+1), H*0.685));
+
+    drawLeaderboard(W/2, H*0.78);
     ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
     ctx.fillText('This Purim, the people fight back.',W/2,H*0.93);
     ctx.fillStyle='#333'; ctx.font=`10px monospace`;
