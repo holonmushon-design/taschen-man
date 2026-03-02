@@ -634,29 +634,28 @@ canvas.addEventListener('touchstart', e => {
   e.preventDefault();
 }, { passive: false });
 
-canvas.addEventListener('touchend', e => {
+// Tap anywhere → advance game state
+document.addEventListener('touchend', e => {
   if (!assetsReady) return;
+  if (gameState==='start'||gameState==='dead') {
+    startMusic();
+    if (gameState==='dead') initLevel();
+    gameState='playing'; msgEl.textContent=''; return;
+  }
+  if (gameState==='levelclear') {
+    level++; levelEl.textContent=level; initLevel();
+    gameState='playing'; msgEl.textContent=''; return;
+  }
+  if (gameState==='gameover') { initGame(); gameState='start'; return; }
+}, { passive: true });
+
+// Swipe on canvas → set direction
+canvas.addEventListener('touchend', e => {
+  if (!assetsReady || gameState!=='playing') return;
   const dx = e.changedTouches[0].clientX - touchX;
   const dy = e.changedTouches[0].clientY - touchY;
   const absDx = Math.abs(dx), absDy = Math.abs(dy);
-
-  // Tap (no significant swipe) → advance game state
-  if (Math.max(absDx, absDy) < 15) {
-    startMusic();
-    if (gameState==='start'||gameState==='dead') {
-      if (gameState==='dead') initLevel();
-      gameState='playing'; msgEl.textContent='';
-    } else if (gameState==='levelclear') {
-      level++; levelEl.textContent=level; initLevel();
-      gameState='playing'; msgEl.textContent='';
-    } else if (gameState==='gameover') {
-      initGame(); gameState='start';
-    }
-    e.preventDefault(); return;
-  }
-
-  // Swipe → set direction
-  if (gameState!=='playing') { e.preventDefault(); return; }
+  if (Math.max(absDx, absDy) < 15) return; // tap, not swipe
   if (absDx > absDy) { player.nextDir = dx > 0 ? RIGHT : LEFT; }
   else               { player.nextDir = dy > 0 ? DOWN  : UP;   }
   e.preventDefault();
