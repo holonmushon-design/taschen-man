@@ -536,6 +536,7 @@ const explosions = [];  // canvas-drawn explosion effects
 const floats = [];
 let trap = null;
 let musicStarted = false;
+let soundMuted   = false;  // persists across death/gameover
 
 // ── Comic panel ─────────────────────────────────────
 let comicPanel = null; // { charIdx, timer, alpha }
@@ -587,25 +588,20 @@ function walkable(c,r,canHQ) {
 function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level; hiscoreEl.textContent=Math.max(topScore(), score); }
 
 function startMusic() {
-  if (musicStarted) return;
-  musicStarted = true;
   bgm.volume = 0.55;
+  bgm.muted  = soundMuted; // always re-apply preference — survives death/gameover
+  if (!musicStarted) { musicStarted = true; }
   bgm.play().catch(()=>{});
 }
 
 function toggleSound() {
+  soundMuted = !soundMuted;
+  bgm.muted  = soundMuted;
   const icon  = document.getElementById('sound-icon');
   const label = document.getElementById('sound-label');
-  if (bgm.muted) {
-    bgm.muted = false;
-    icon.src = 'assets/icons/sound_on_00.png';
-    label.textContent = 'ON';
-  } else {
-    bgm.muted = true;
-    icon.src = 'assets/icons/sound_off_00.png';
-    label.textContent = 'OFF';
-    startMusic();
-  }
+  icon.src      = soundMuted ? 'assets/icons/sound_off_00.png' : 'assets/icons/sound_on_00.png';
+  label.textContent = soundMuted ? 'OFF' : 'ON';
+  if (!soundMuted) startMusic();
 }
 
 // ═══════════════════════════════════════════════════
