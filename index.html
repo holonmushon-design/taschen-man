@@ -645,8 +645,8 @@ canvas.addEventListener('touchstart', e => {
   if (gameState === 'playing') e.preventDefault(); // only block scroll during play
 }, { passive: false });
 
-// Tap anywhere → advance game state
-document.addEventListener('touchend', e => {
+// Tap anywhere → advance game state (touchstart is more reliable on iOS)
+document.addEventListener('touchstart', e => {
   if (!assetsReady) return;
   if (gameState==='start'||gameState==='dead') {
     startMusic();
