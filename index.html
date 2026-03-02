@@ -698,6 +698,10 @@ mobileInputEl.addEventListener('keydown', e => {
   }
 });
 
+const comicPanelEl = document.getElementById('comic-panel');
+const comicImgEl   = document.getElementById('comic-img');
+const comicBalloon = document.getElementById('comic-balloon');
+
 // ── D-pad + mobile bar (touch devices only) ──────────
 if (isMobile) {
   // Move comic panel into mobile-bar so it sits beside the D-pad
@@ -1275,10 +1279,6 @@ function drawHQBuilding() {
 // ═══════════════════════════════════════════════════
 //  DRAW — FLOATING SCORES + OVERLAY
 // ═══════════════════════════════════════════════════
-const comicPanelEl  = document.getElementById('comic-panel');
-const comicImgEl    = document.getElementById('comic-img');
-const comicBalloon  = document.getElementById('comic-balloon');
-
 function updateComicPanel() {
   if (!comicPanel) {
     if (!isMobile) comicPanelEl.style.display = 'none';
