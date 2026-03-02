@@ -626,6 +626,8 @@ function initLevel() {
   comicPanel=null; comicCooldown=60*5;
   bonusItem=null; bonusSpawnTimer=60*8; slowTimer=0;
   backpack=[]; gragTimer=0; costumeTimer=0; oilTimer=0; chargeObj=null;
+  // DEBUG: start with C4
+  backpack.push({ def: BONUS_DEFS.find(d=>d.key==='charge') });
   renderBackpack();
 
   const ps=ctr(10,18);
