@@ -198,6 +198,7 @@ canvas { display: block; image-rendering: pixelated; }
   <span><img id="heart-icon" src="assets/icons/heart_00.png" style="width:13px;height:13px;image-rendering:pixelated;vertical-align:middle"> <span id="lives">3</span></span>
   <span>LEVEL: <span id="level">1</span></span>
   <button id="sound-btn" onclick="toggleSound()"><img id="sound-icon" src="assets/icons/sound_on_00.png" style="image-rendering:pixelated"> <span id="sound-label">ON</span></button>
+  <span id="version-label" style="color:#444;font-size:9px;letter-spacing:0"></span>
 </div>
 <div id="game-wrap">
   <div id="comic-panel">
@@ -256,6 +257,15 @@ const DIRS=[UP,DOWN,LEFT,RIGHT];
 
 const isMobile = 'ontouchstart' in window;
 const ACT      = isMobile ? 'TAP' : 'ENTER';
+const VERSION  = (() => {
+  const d = new Date(document.lastModified);
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  return `v${yy}-${mm}-${dd} ${hh}:${mi}`;
+})();
 
 const scoreEl  =document.getElementById('score');
 const hiscoreEl=document.getElementById('hiscore');
@@ -263,6 +273,7 @@ const livesEl  =document.getElementById('lives');
 const levelEl  =document.getElementById('level');
 const msgEl    =document.getElementById('msg');
 const bgm      =document.getElementById('bgm');
+document.getElementById('version-label').textContent = VERSION;
 
 function loadBoard() {
   try { return JSON.parse(localStorage.getItem('taschenBoard')) || []; }
@@ -1319,6 +1330,9 @@ function drawOverlay() {
     drawLeaderboard(W/2, H*0.52);
     ctx.fillStyle='#ff6666'; ctx.font=`${Math.max(18,CELL*0.65)}px 'VT323'`;
     ctx.fillText('This Purim, the people fight back.',W/2,H*0.93);
+    ctx.fillStyle='#333'; ctx.font=`10px monospace`;
+    ctx.textAlign='right'; ctx.fillText(VERSION, W-6, H-4);
+    ctx.textAlign='center';
   }
   if (gameState==='gameover') {
     ctx.fillStyle='rgba(0,0,17,0.88)'; ctx.fillRect(0,0,W,H);
