@@ -25,6 +25,23 @@ body {
   margin-bottom: 8px;
 }
 #hud img { width: 24px; height: 24px; }
+#backpack {
+  display: flex; gap: 6px; align-items: center;
+  margin-bottom: 6px;
+}
+#backpack .bp-label { color:#888; font-size:10px; letter-spacing:1px; }
+.bp-slot {
+  width: 38px; height: 38px;
+  border: 2px solid #444; border-radius: 4px;
+  background: #111; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Press Start 2P', monospace; font-size: 8px;
+  color: #888; transition: border-color 0.1s;
+  position: relative;
+}
+.bp-slot:hover { border-color: #ffd700; }
+.bp-slot.occupied { border-color: #666; }
+.bp-slot canvas { image-rendering: pixelated; }
 #sound-btn {
   background: none; border: 1px solid #555; border-radius: 4px;
   color: #ccc; font-size: 12px; cursor: pointer; padding: 4px 10px;
@@ -200,6 +217,13 @@ canvas { display: block; image-rendering: pixelated; }
   <button id="sound-btn" onclick="toggleSound()"><img id="sound-icon" src="assets/icons/sound_on_00.png" style="image-rendering:pixelated"> <span id="sound-label">ON</span></button>
   <span id="version-label" style="color:#444;font-size:9px;letter-spacing:0"></span>
 </div>
+<div id="backpack">
+  <span class="bp-label">BAG:</span>
+  <div class="bp-slot" id="bp-0" onclick="useItem(0)"><canvas width="32" height="32"></canvas></div>
+  <div class="bp-slot" id="bp-1" onclick="useItem(1)"><canvas width="32" height="32"></canvas></div>
+  <div class="bp-slot" id="bp-2" onclick="useItem(2)"><canvas width="32" height="32"></canvas></div>
+  <span style="color:#555;font-size:9px;font-family:monospace">Q W E</span>
+</div>
 <div id="game-wrap">
   <div id="comic-panel">
     <div id="comic-frame"><img id="comic-img" src="" alt=""></div>
@@ -254,11 +278,16 @@ const WARN_FRAMES    = 180;
 
 const BONUS_LIFETIME = 60*10;  // 10s on screen before disappearing
 const BONUS_INTERVAL = 60*18;  // new item every 18s
+// storable=true → goes to backpack; false → instant effect on pickup
 const BONUS_DEFS = [
-  { key:'scroll',      frames:[2,3], effect:'score' },  // 50% chance
-  { key:'scroll',      frames:[2,3], effect:'score' },  // (appears twice = 2/4 weight)
-  { key:'wine_bottle', frames:[6,7], effect:'slow'  },  // 25% chance
-  { key:'wine_cup',    frames:[8,9], effect:'life'  },  // 25% chance
+  { key:'scroll',      frames:[2,3], effect:'score',   storable:false, label:'SCROLL', color:'#ffd700' },
+  { key:'scroll',      frames:[2,3], effect:'score',   storable:false, label:'SCROLL', color:'#ffd700' },
+  { key:'wine_cup',    frames:[8,9], effect:'life',    storable:false, label:'CUP',    color:'#cc4444' },
+  { key:'wine_bottle', frames:[6,7], effect:'slow',    storable:true,  label:'WINE',   color:'#44bb44' },
+  { key:'gragger',     frames:null,  effect:'gragger', storable:true,  label:'GRAG',   color:'#ff8800' },
+  { key:'costume',     frames:null,  effect:'costume', storable:true,  label:'MASK',   color:'#9944ff' },
+  { key:'oil_can',     frames:null,  effect:'oil',     storable:true,  label:'OIL',    color:'#ddcc00' },
+  { key:'charge',      frames:null,  effect:'charge',  storable:true,  label:'C4',     color:'#cc2222' },
 ];
 
 const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
@@ -494,6 +523,11 @@ let player, officials;
 let bonusItem = null;   // { def, col, row, timer }
 let bonusSpawnTimer = BONUS_INTERVAL;
 let slowTimer = 0;
+let backpack = [];      // max 3 items, each: { def }
+let gragTimer = 0;
+let costumeTimer = 0;
+let oilTimer = 0;
+let chargeObj = null;   // { col, row, fuse, maxFuse }
 const floats = [];
 let trap = null;
 let musicStarted = false;
@@ -587,6 +621,8 @@ function initLevel() {
   pilotTimer=0; multKill=0; animFrame=0; floats.length=0; trap=null;
   comicPanel=null; comicCooldown=60*5;
   bonusItem=null; bonusSpawnTimer=60*8; slowTimer=0;
+  backpack=[]; gragTimer=0; costumeTimer=0; oilTimer=0; chargeObj=null;
+  renderBackpack();
 
   const ps=ctr(10,18);
   player={
@@ -642,6 +678,9 @@ document.addEventListener('keydown',e=>{
     }
     if (gameState==='gameover') { initGame(); gameState='start'; return; }
   }
+  if (e.code==='KeyQ') { useItem(0); return; }
+  if (e.code==='KeyW') { useItem(1); return; }
+  if (e.code==='KeyE') { useItem(2); return; }
   if (gameState!=='playing') return;
   if (e.code==='ArrowLeft' ||e.code==='KeyA') player.nextDir=LEFT;
   if (e.code==='ArrowRight'||e.code==='KeyD') player.nextDir=RIGHT;
@@ -785,6 +824,147 @@ function collectDot() {
   }
 }
 
+function useItem(slot) {
+  if(slot>=backpack.length||gameState!=='playing') return;
+  const {def} = backpack[slot];
+  backpack.splice(slot,1);
+  renderBackpack();
+  if(def.effect==='slow') {
+    slowTimer=60*8;
+    floats.push({text:'ENEMIES DRUNK!',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Enemies drunk for 8s!';
+  } else if(def.effect==='gragger') {
+    gragTimer=60*5;
+    officials.forEach(o=>{if(o.state==='chase'||o.state==='exit'){o.state='scared';o.eatDelay=30;}});
+    floats.push({text:'GRAGGER!',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='GRAGGER — enemies scared!';
+  } else if(def.effect==='costume') {
+    costumeTimer=60*8;
+    floats.push({text:'INVISIBLE!',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Purim costume on — 8s!';
+  } else if(def.effect==='oil') {
+    oilTimer=60*5;
+    floats.push({text:'OIL SPILL!',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Enemies slipping!';
+  } else if(def.effect==='charge') {
+    chargeObj={col:col(player.x),row:row(player.y),fuse:60*3,maxFuse:60*3};
+    floats.push({text:'FIRE IN THE HOLE!',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Charge placed — RUN!';
+  }
+  setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1800);
+}
+
+function detonateCharge() {
+  const {col:cc, row:cr} = chargeObj;
+  chargeObj=null;
+  const blast=[[cc,cr],[cc-1,cr],[cc+1,cr],[cc,cr-1],[cc,cr+1]];
+  blast.forEach(([c,r])=>{
+    if(c<1||c>=COLS-1||r<1||r>=ROWS-1) return; // border — indestructible
+    const t=getCell(c,r);
+    if(t===HQ||t===DOOR) return;                // palace — indestructible
+    if(t===WALL) setCell(c,r,EMPTY);
+  });
+  officials.forEach(o=>{
+    if(o.state==='return'||o.state==='hq') return;
+    if(blast.some(([c,r])=>Math.abs(col(o.x)-c)<=1&&Math.abs(row(o.y)-r)<=1)){
+      o.state='return'; o.dir=UP;
+      floats.push({text:'BOOM!',x:o.x,y:o.y,alpha:1});
+    }
+  });
+}
+
+function renderBackpack() {
+  for(let i=0;i<3;i++) {
+    const slot=document.getElementById(`bp-${i}`);
+    if(!slot) continue;
+    const canvas=slot.querySelector('canvas');
+    if(!canvas) continue;
+    const item=backpack[i];
+    slot.classList.toggle('occupied',!!item);
+    const ctx2=canvas.getContext('2d');
+    ctx2.clearRect(0,0,32,32);
+    if(!item) {
+      ctx2.fillStyle='#333';
+      ctx2.font='8px monospace'; ctx2.textAlign='center'; ctx2.textBaseline='middle';
+      ctx2.fillText(i===0?'Q':i===1?'W':'E', 16, 16);
+    } else {
+      drawSlotIcon(ctx2, item.def);
+    }
+  }
+}
+
+function drawSlotIcon(ctx2, def) {
+  const coll=SP['collectibles'];
+  if(def.frames && coll) {
+    const img=coll[def.frames[0]];
+    if(img) { ctx2.drawImage(img,2,2,28,28); return; }
+  }
+  // Canvas fallbacks per type
+  ctx2.save();
+  if(def.key==='gragger') {
+    ctx2.fillStyle='#ff8800';
+    ctx2.beginPath(); ctx2.arc(16,10,7,0,Math.PI*2); ctx2.fill();
+    ctx2.strokeStyle='#ff8800'; ctx2.lineWidth=4;
+    ctx2.beginPath(); ctx2.moveTo(16,17); ctx2.lineTo(16,28); ctx2.stroke();
+    ctx2.fillStyle='#ffbb44';
+    ctx2.beginPath(); ctx2.arc(16,10,4,0,Math.PI*2); ctx2.fill();
+  } else if(def.key==='costume') {
+    ctx2.fillStyle='#9944ff';
+    ctx2.beginPath(); ctx2.arc(16,10,7,0,Math.PI*2); ctx2.fill();
+    ctx2.beginPath(); ctx2.moveTo(5,28); ctx2.lineTo(9,14); ctx2.lineTo(16,18); ctx2.lineTo(23,14); ctx2.lineTo(27,28); ctx2.closePath(); ctx2.fill();
+    ctx2.fillStyle='#000'; ctx2.fillRect(10,9,4,4); ctx2.fillRect(17,9,4,4);
+  } else if(def.key==='oil_can') {
+    ctx2.fillStyle='#ddcc00';
+    ctx2.fillRect(8,12,14,14);
+    ctx2.fillStyle='#aaa'; ctx2.fillRect(12,8,8,5);
+    ctx2.fillStyle='#ffee44'; ctx2.fillRect(10,14,10,10);
+    ctx2.fillStyle='#333'; ctx2.fillRect(14,6,4,3);
+  } else if(def.key==='charge') {
+    ctx2.fillStyle='#555'; ctx2.fillRect(8,10,16,14);
+    ctx2.fillStyle='#333'; ctx2.fillRect(10,12,12,10);
+    ctx2.fillStyle='#ff2222';
+    ctx2.beginPath(); ctx2.arc(16,16,4,0,Math.PI*2); ctx2.fill();
+    ctx2.strokeStyle='#ff8800'; ctx2.lineWidth=2;
+    ctx2.beginPath(); ctx2.moveTo(20,10); ctx2.lineTo(26,4); ctx2.stroke();
+    if(Math.floor(Date.now()/300)%2===0) { // blink fuse tip
+      ctx2.fillStyle='#ffff00';
+      ctx2.beginPath(); ctx2.arc(26,4,3,0,Math.PI*2); ctx2.fill();
+    }
+  }
+  ctx2.restore();
+}
+
+function drawBonusItemCanvas(key, cx, cy, size) {
+  const h=size/2;
+  ctx.save();
+  if(key==='gragger') {
+    ctx.fillStyle='#ff8800';
+    ctx.beginPath(); ctx.arc(cx,cy-h*0.3,h*0.55,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#ff8800'; ctx.lineWidth=h*0.25;
+    ctx.beginPath(); ctx.moveTo(cx,cy-h*0.3+h*0.5); ctx.lineTo(cx,cy+h*0.6); ctx.stroke();
+    ctx.fillStyle='#ffbb44';
+    ctx.beginPath(); ctx.arc(cx,cy-h*0.3,h*0.3,0,Math.PI*2); ctx.fill();
+  } else if(key==='costume') {
+    ctx.fillStyle='#9944ff';
+    ctx.beginPath(); ctx.arc(cx,cy-h*0.4,h*0.45,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx-h*0.7,cy+h*0.7); ctx.lineTo(cx-h*0.3,cy-h*0.1); ctx.lineTo(cx,cy+h*0.2); ctx.lineTo(cx+h*0.3,cy-h*0.1); ctx.lineTo(cx+h*0.7,cy+h*0.7); ctx.closePath(); ctx.fill();
+  } else if(key==='oil_can') {
+    ctx.fillStyle='#ddcc00';
+    ctx.fillRect(cx-h*0.5,cy-h*0.3,h,h*0.8);
+    ctx.fillStyle='#aaa'; ctx.fillRect(cx-h*0.25,cy-h*0.55,h*0.5,h*0.3);
+    ctx.fillStyle='#333'; ctx.fillRect(cx-h*0.1,cy-h*0.7,h*0.2,h*0.2);
+  } else if(key==='charge') {
+    ctx.fillStyle='#555'; ctx.fillRect(cx-h*0.5,cy-h*0.3,h,h*0.7);
+    ctx.fillStyle='#ff2222'; ctx.beginPath(); ctx.arc(cx,cy,h*0.25,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#ff8800'; ctx.lineWidth=h*0.12;
+    ctx.beginPath(); ctx.moveTo(cx+h*0.25,cy-h*0.2); ctx.lineTo(cx+h*0.6,cy-h*0.6); ctx.stroke();
+    if(animFrame%20<10) {
+      ctx.fillStyle='#ffff00'; ctx.beginPath(); ctx.arc(cx+h*0.6,cy-h*0.6,h*0.15,0,Math.PI*2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function spawnBonus() {
   // Collect all walkable non-wall non-HQ cells away from player
   const pc=col(player.x), pr=row(player.y);
@@ -805,17 +985,25 @@ function collectBonus() {
   if(!bonusItem||!atCenter(player.x,player.y)) return;
   if(col(player.x)!==bonusItem.col||row(player.y)!==bonusItem.row) return;
   const {def} = bonusItem;
-  bonusItem=null;
-  bonusSpawnTimer=BONUS_INTERVAL;
+
+  if(def.storable) {
+    if(backpack.length>=3) return; // bag full — item stays on floor
+    if(backpack.some(i=>i.def.key===def.key)) return; // already carrying one
+    backpack.push({def});
+    bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL;
+    renderBackpack();
+    floats.push({text:def.label,x:player.x,y:player.y,alpha:1});
+    msgEl.textContent=`${def.label} picked up! (Q/W/E to use)`;
+    setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
+    return;
+  }
+
+  // Instant effects
+  bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL;
   if(def.effect==='score') {
     const pts=500*level; score+=pts; hud();
     floats.push({text:`+${pts}`,x:player.x,y:player.y,alpha:1});
     msgEl.textContent='Intel secured!';
-    setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
-  } else if(def.effect==='slow') {
-    slowTimer=60*8; // 8 seconds
-    floats.push({text:'DRUNK!',x:player.x,y:player.y,alpha:1});
-    msgEl.textContent='Enemies drunk!';
     setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
   } else if(def.effect==='life') {
     lives=Math.min(lives+1,5); hud();
@@ -890,7 +1078,12 @@ function moveOfficial(o) {
   const oc=col(o.x), or_=row(o.y);
   if (atCenter(o.x,o.y)) {
     if (o.state==='chase') {
-      const t=chaseTarget(o); pickDir(o,t.c,t.r,false,false);
+      if(costumeTimer>0||oilTimer>0) {
+        const valid=DIRS.filter(d=>!(d.dx===-o.dir.dx&&d.dy===-o.dir.dy)&&walkable(oc+d.dx,or_+d.dy,false));
+        if(valid.length) o.dir=valid[Math.floor(Math.random()*valid.length)];
+      } else {
+        const t=chaseTarget(o); pickDir(o,t.c,t.r,false,false);
+      }
     } else if (o.state==='scared') {
       const valid=DIRS.filter(d=>!(d.dx===-o.dir.dx&&d.dy===-o.dir.dy)&&walkable(oc+d.dx,or_+d.dy,false));
       if(valid.length) o.dir=valid[Math.floor(Math.random()*valid.length)];
@@ -935,7 +1128,7 @@ function checkCollisions() {
       const pts=200*(1<<(multKill-1)); score+=pts; hud();
       floats.push({text:`+${pts}`,x:o.x,y:o.y,alpha:1});
       o.state='return'; o.dir=UP;
-    } else if(!player.pilotMode&&o.state==='chase'&&player.visible) {
+    } else if(!player.pilotMode&&costumeTimer<=0&&o.state==='chase'&&player.visible) {
       lives--; hud();
       // Show the catcher's portrait immediately
       const catchKey = CHAR_KEYS[o.pers];
@@ -1003,6 +1196,10 @@ function update() {
 
   // Bonus item timers
   if(slowTimer>0) slowTimer--;
+  if(gragTimer>0){ gragTimer--; if(gragTimer===0) officials.forEach(o=>{if(o.state==='scared'&&!player.pilotMode)o.state='chase';}); }
+  if(costumeTimer>0) costumeTimer--;
+  if(oilTimer>0) oilTimer--;
+  if(chargeObj){ chargeObj.fuse--; if(chargeObj.fuse<=0) detonateCharge(); }
   if(bonusItem) {
     bonusItem.timer--;
     if(bonusItem.timer<=0) { bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL; }
@@ -1149,20 +1346,34 @@ function drawDots() {
 
   // Draw bonus item (bob up/down, flash when about to expire)
   if (bonusItem) {
-    const coll = SP['collectibles'];
     const bx = bonusItem.col*CELL+CELL/2;
     const by = bonusItem.row*CELL+CELL/2;
     const bob = Math.sin(animFrame*0.12)*3;
-    const expiring = bonusItem.timer < 60*3; // last 3s
-    if (expiring && animFrame%20 < 10) return; // blink
-    if (coll) {
-      const fi = bonusItem.def.frames[Math.floor(animFrame/20)%2];
-      const img = coll[fi];
-      if (img) {
-        const ds = CELL*0.85;
-        ctx.drawImage(img, bx-ds/2, by-ds/2+bob, ds, ds);
+    const expiring = bonusItem.timer < 60*3;
+    if (!(expiring && animFrame%20 < 10)) {
+      const ds = CELL*0.85;
+      if (bonusItem.def.frames) {
+        const coll = SP['collectibles'];
+        if (coll) {
+          const fi = bonusItem.def.frames[Math.floor(animFrame/20)%2];
+          const img = coll[fi];
+          if (img) ctx.drawImage(img, bx-ds/2, by-ds/2+bob, ds, ds);
+        }
+      } else {
+        drawBonusItemCanvas(bonusItem.def.key, bx, by+bob, ds);
       }
     }
+  }
+
+  // Draw placed charge with countdown
+  if (chargeObj) {
+    const cx2 = chargeObj.col*CELL+CELL/2;
+    const cy2 = chargeObj.row*CELL+CELL/2;
+    drawBonusItemCanvas('charge', cx2, cy2, CELL*0.85);
+    const secs = Math.ceil(chargeObj.fuse/60);
+    ctx.fillStyle='#ff4444'; ctx.font=`bold ${Math.max(10,CELL*0.4)}px 'Press Start 2P'`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(secs, cx2, cy2-CELL*0.55);
   }
 }
 
@@ -1252,6 +1463,7 @@ function drawPlayer() {
 
   // Normal operative — try sprite
   ctx.restore();
+  if(costumeTimer>0) ctx.globalAlpha=0.3;
   if (!drawEntitySprite('player','normal',player.dir,player.x,player.y)) {
     // Canvas fallback
     ctx.save(); ctx.translate(player.x,player.y);
@@ -1270,6 +1482,7 @@ function drawPlayer() {
     ctx.fillStyle='#00aa00'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.1,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
+  ctx.globalAlpha=1;
 }
 
 // ═══════════════════════════════════════════════════
@@ -1282,7 +1495,8 @@ function drawOfficial(o) {
   const r=CELL/2-2;
 
   // Drunk wobble — sway side-to-side when wine bottle active
-  const drunkOffsetX = (slowTimer>0 && o.state==='chase') ? Math.sin(animFrame*0.25 + o.pers*1.3)*4 : 0;
+  const drunkOffsetX = (slowTimer>0  && o.state==='chase') ? Math.sin(animFrame*0.25 + o.pers*1.3)*4 :
+                       (oilTimer>0   && o.state==='chase') ? Math.sin(animFrame*0.5  + o.pers*2.1)*6 : 0;
 
   if (o.state==='return') {
     // Ghost effect: translucent scared sprite + glow
