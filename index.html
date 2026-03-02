@@ -589,20 +589,26 @@ function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.t
 
 function startMusic() {
   bgm.volume = 0.55;
-  bgm.muted  = soundMuted;
   if (!musicStarted) musicStarted = true;
-  if (!soundMuted) bgm.play().catch(()=>{}); // never call play() when muted — iOS resets muted state
+  if (soundMuted) { bgm.pause(); bgm.muted = true; }
+  else            { bgm.muted = false; bgm.play().catch(()=>{}); }
 }
 
 function toggleSound() {
   soundMuted = !soundMuted;
-  bgm.muted  = soundMuted;
+  if (soundMuted) { bgm.muted = true; bgm.pause(); }
+  else            { bgm.muted = false; bgm.play().catch(()=>{}); }
   const icon  = document.getElementById('sound-icon');
   const label = document.getElementById('sound-label');
   icon.src          = soundMuted ? 'assets/icons/sound_off_00.png' : 'assets/icons/sound_on_00.png';
   label.textContent = soundMuted ? 'OFF' : 'ON';
-  if (!soundMuted) bgm.play().catch(()=>{}); // resume on unmute
 }
+
+// Prevent sound button taps from bubbling to the document touchstart handler
+// (which does game-state transitions) — fixes accidental unmute on tap-to-respawn
+document.getElementById('sound-btn').addEventListener('touchstart', e => {
+  e.stopPropagation();
+}, { passive: true });
 
 // ═══════════════════════════════════════════════════
 //  INIT
