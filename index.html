@@ -200,6 +200,7 @@ canvas { display: block; image-rendering: pixelated; }
   <button id="sound-btn" onclick="toggleSound()"><img id="sound-icon" src="assets/icons/sound_on_00.png" style="image-rendering:pixelated"> <span id="sound-label">ON</span></button>
   <span id="version-label" style="color:#444;font-size:9px;letter-spacing:0"></span>
 </div>
+<div id="dbg" style="position:fixed;top:0;left:0;background:rgba(255,0,0,0.85);color:#fff;font-size:14px;padding:4px 8px;z-index:9999;font-family:monospace">waiting...</div>
 <div id="game-wrap">
   <div id="comic-panel">
     <div id="comic-frame"><img id="comic-img" src="" alt=""></div>
@@ -647,6 +648,8 @@ canvas.addEventListener('touchstart', e => {
 
 // Tap anywhere → advance game state (touchstart is more reliable on iOS)
 document.addEventListener('touchstart', e => {
+  const dbg = document.getElementById('dbg');
+  if (dbg) dbg.textContent = `tap! ready=${assetsReady} state=${gameState}`;
   if (!assetsReady) return;
   if (gameState==='start'||gameState==='dead') {
     startMusic();
