@@ -109,6 +109,38 @@ canvas { display: block; image-rendering: pixelated; }
   border: 6px solid transparent;
   border-bottom-color: #fffde7;
 }
+
+/* ── Mobile ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  #title { font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
+  #hud { font-size: 9px; gap: 10px; margin-bottom: 4px; }
+  #hud img { width: 14px !important; height: 14px !important; }
+  #sound-btn { font-size: 9px; padding: 2px 6px; }
+  #sound-btn img { width: 14px !important; height: 14px !important; }
+  #msg { font-size: 13px; }
+  /* Comic panel becomes a bottom overlay strip */
+  #comic-panel {
+    right: auto !important;
+    top: auto !important;
+    transform: none !important;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(0,0,10,0.92);
+    border-top: 2px solid #ffd700;
+    border-radius: 0;
+  }
+  #comic-frame { width: 72px; height: 72px; flex-shrink: 0; border-radius: 6px; }
+  #comic-balloon {
+    flex: 1; width: auto; margin-top: 0;
+    min-height: 0; font-size: 17px;
+  }
+  #comic-balloon::before, #comic-balloon::after { display: none; }
+}
 </style>
 </head>
 <body>
@@ -127,6 +159,7 @@ canvas { display: block; image-rendering: pixelated; }
   </div>
   <canvas id="c"></canvas>
 </div>
+<input id="mobile-input" type="text" maxlength="3" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="position:fixed;left:-9999px;opacity:0;pointer-events:none">
 <div id="msg">Loading assets…</div>
 <audio id="bgm" src="assets/Desert_Caravan_Uprising.mp3" loop preload="auto"></audio>
 
@@ -140,7 +173,7 @@ const avH  = Math.min(window.innerHeight - 80, 780);
 const avW  = window.innerWidth - 20;
 let CELL   = Math.floor(Math.min(avH / ROWS, avW / COLS));
 if (CELL % 2 !== 0) CELL--;
-CELL = Math.max(24, Math.min(40, CELL));
+CELL = Math.max(18, Math.min(40, CELL));
 
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -531,6 +564,60 @@ document.addEventListener('keydown',e=>{
   if (e.code==='ArrowDown' ||e.code==='KeyS') player.nextDir=DOWN;
 });
 
+// ── Touch controls ───────────────────────────────────
+const mobileInputEl = document.getElementById('mobile-input');
+let touchX = 0, touchY = 0;
+
+canvas.addEventListener('touchstart', e => {
+  touchX = e.touches[0].clientX;
+  touchY = e.touches[0].clientY;
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  if (!assetsReady) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  const dy = e.changedTouches[0].clientY - touchY;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+
+  // Tap (no significant swipe) → advance game state
+  if (Math.max(absDx, absDy) < 15) {
+    startMusic();
+    if (gameState==='start'||gameState==='dead') {
+      if (gameState==='dead') initLevel();
+      gameState='playing'; msgEl.textContent='';
+    } else if (gameState==='levelclear') {
+      level++; levelEl.textContent=level; initLevel();
+      gameState='playing'; msgEl.textContent='';
+    } else if (gameState==='gameover') {
+      initGame(); gameState='start';
+    }
+    e.preventDefault(); return;
+  }
+
+  // Swipe → set direction
+  if (gameState!=='playing') { e.preventDefault(); return; }
+  if (absDx > absDy) { player.nextDir = dx > 0 ? RIGHT : LEFT; }
+  else               { player.nextDir = dy > 0 ? DOWN  : UP;   }
+  e.preventDefault();
+}, { passive: false });
+
+// Mobile initials entry via hidden input
+mobileInputEl.addEventListener('input', () => {
+  if (gameState !== 'initials') return;
+  initialsEntry = mobileInputEl.value.toUpperCase().replace(/[^A-Z]/g,'').slice(0,3);
+  mobileInputEl.value = initialsEntry;
+});
+mobileInputEl.addEventListener('keydown', e => {
+  if (gameState !== 'initials') return;
+  if (e.key === 'Enter' || e.key === 'Go') {
+    const name = (initialsEntry + '___').slice(0,3);
+    saveToBoard(name, score);
+    gameState='gameover'; msgEl.textContent='ENTER to play again';
+    mobileInputEl.blur();
+  }
+});
+
 // ═══════════════════════════════════════════════════
 //  PLAYER MOVEMENT
 // ═══════════════════════════════════════════════════
@@ -707,7 +794,7 @@ function checkCollisions() {
       comicPanel = { charIdx: officials.indexOf(o), mood: 'chase', key: catchKey, phrase: catchPhrase, timer: COMIC_SHOW, alpha: 1 };
       comicCooldown = COMIC_GAP;
       if(lives<=0){
-        if(boardQualifies(score)){ gameState='initials'; initialsEntry=''; msgEl.textContent=''; }
+        if(boardQualifies(score)){ gameState='initials'; initialsEntry=''; msgEl.textContent=''; mobileInputEl.value=''; mobileInputEl.focus(); }
         else { gameState='gameover'; msgEl.textContent='GAME OVER — ENTER to restart'; }
       } else{gameState='dead';msgEl.innerHTML=`<img src="assets/icons/skull_00.png" style="width:22px;height:22px;image-rendering:pixelated;vertical-align:middle"> Caught! ${lives} lives left — ENTER`;}
       return;
