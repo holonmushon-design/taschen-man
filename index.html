@@ -595,6 +595,7 @@ function startMusic() {
 }
 
 function toggleSound() {
+  document.getElementById('sound-btn').blur(); // drop focus so Space/Enter can't re-trigger
   soundMuted = !soundMuted;
   if (soundMuted) { bgm.muted = true; bgm.pause(); }
   else            { bgm.muted = false; bgm.play().catch(()=>{}); }
