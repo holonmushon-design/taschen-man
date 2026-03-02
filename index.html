@@ -248,8 +248,18 @@ const SPEED_PLAYER   = 2;
 const SPEED_OFFICIAL = 2;
 const SPEED_SCARED   = 1;
 const SPEED_RETURN   = 2;
+const SPEED_DRUNK    = 1;
 const PILOT_FRAMES   = 600;
 const WARN_FRAMES    = 180;
+
+const BONUS_LIFETIME = 60*10;  // 10s on screen before disappearing
+const BONUS_INTERVAL = 60*18;  // new item every 18s
+const BONUS_DEFS = [
+  { key:'scroll',      frames:[2,3], effect:'score' },  // 50% chance
+  { key:'scroll',      frames:[2,3], effect:'score' },  // (appears twice = 2/4 weight)
+  { key:'wine_bottle', frames:[6,7], effect:'slow'  },  // 25% chance
+  { key:'wine_cup',    frames:[8,9], effect:'life'  },  // 25% chance
+];
 
 const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
 const UP={dx:0,dy:-1}, DOWN={dx:0,dy:1}, LEFT={dx:-1,dy:0}, RIGHT={dx:1,dy:0};
@@ -481,6 +491,9 @@ let leaderboard = [];
 let initialsEntry = '';
 let dotsLeft, pilotTimer, multKill, animFrame;
 let player, officials;
+let bonusItem = null;   // { def, col, row, timer }
+let bonusSpawnTimer = BONUS_INTERVAL;
+let slowTimer = 0;
 const floats = [];
 let trap = null;
 let musicStarted = false;
@@ -573,6 +586,7 @@ function initLevel() {
   maze.forEach(r=>r.forEach(v=>{if(v===DOT||v===MASK)dotsLeft++;}));
   pilotTimer=0; multKill=0; animFrame=0; floats.length=0; trap=null;
   comicPanel=null; comicCooldown=60*5;
+  bonusItem=null; bonusSpawnTimer=60*8; slowTimer=0;
 
   const ps=ctr(10,18);
   player={
@@ -771,6 +785,46 @@ function collectDot() {
   }
 }
 
+function spawnBonus() {
+  // Collect all walkable non-wall non-HQ cells away from player
+  const pc=col(player.x), pr=row(player.y);
+  const candidates=[];
+  for(let r=1;r<ROWS-1;r++) for(let c=1;c<COLS-1;c++) {
+    const t=getCell(c,r);
+    if(t===WALL||t===HQ||t===DOOR||t===EMPTY) continue;
+    if(Math.abs(c-pc)+Math.abs(r-pr)<4) continue; // not too close to player
+    candidates.push({c,r});
+  }
+  if(!candidates.length) return;
+  const cell=candidates[Math.floor(Math.random()*candidates.length)];
+  const def=BONUS_DEFS[Math.floor(Math.random()*BONUS_DEFS.length)];
+  bonusItem={def, col:cell.c, row:cell.r, timer:BONUS_LIFETIME};
+}
+
+function collectBonus() {
+  if(!bonusItem||!atCenter(player.x,player.y)) return;
+  if(col(player.x)!==bonusItem.col||row(player.y)!==bonusItem.row) return;
+  const {def} = bonusItem;
+  bonusItem=null;
+  bonusSpawnTimer=BONUS_INTERVAL;
+  if(def.effect==='score') {
+    const pts=500*level; score+=pts; hud();
+    floats.push({text:`+${pts}`,x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Intel secured!';
+    setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
+  } else if(def.effect==='slow') {
+    slowTimer=60*8; // 8 seconds
+    floats.push({text:'DRUNK!',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Enemies drunk!';
+    setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
+  } else if(def.effect==='life') {
+    lives=Math.min(lives+1,5); hud();
+    floats.push({text:'+LIFE',x:player.x,y:player.y,alpha:1});
+    msgEl.textContent='Extra life!';
+    setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
+  }
+}
+
 // ═══════════════════════════════════════════════════
 //  TRAP DOOR
 // ═══════════════════════════════════════════════════
@@ -859,7 +913,7 @@ function moveOfficial(o) {
       if(oc===10&&or_<=6) o.state = player.pilotMode ? 'scared' : 'chase';
     }
   }
-  const spd=o.state==='scared'?SPEED_SCARED:o.state==='return'?SPEED_RETURN:SPEED_OFFICIAL;
+  const spd=o.state==='scared'?SPEED_SCARED:o.state==='return'?SPEED_RETURN:slowTimer>0?SPEED_DRUNK:SPEED_OFFICIAL;
   const canHQ=o.state==='return'||o.state==='hq'||o.state==='exit';
   const nx=o.x+o.dir.dx*spd, ny=o.y+o.dir.dy*spd;
   if(walkable(col(nx),row(ny),canHQ)){o.x=nx;o.y=ny;}
@@ -947,7 +1001,17 @@ function update() {
   if(player.mouth>0.38) player.mouthDir=-1;
   if(player.mouth<0.02) player.mouthDir=1;
 
-  movePlayer(); movePlane(); collectDot(); updateTrap();
+  // Bonus item timers
+  if(slowTimer>0) slowTimer--;
+  if(bonusItem) {
+    bonusItem.timer--;
+    if(bonusItem.timer<=0) { bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL; }
+  } else {
+    bonusSpawnTimer--;
+    if(bonusSpawnTimer<=0) spawnBonus();
+  }
+
+  movePlayer(); movePlane(); collectDot(); collectBonus(); updateTrap();
   officials.forEach(o=>{ if(o.eatDelay>0)o.eatDelay--; moveOfficial(o); });
   checkCollisions();
   for(let i=floats.length-1;i>=0;i--){floats[i].y-=1;floats[i].alpha-=0.02;if(floats[i].alpha<=0)floats.splice(i,1);}
@@ -1082,6 +1146,24 @@ function drawDots() {
       ctx.textAlign='center'; ctx.fillText('🎭',cx,cy);
     }
   }
+
+  // Draw bonus item (bob up/down, flash when about to expire)
+  if (bonusItem) {
+    const coll = SP['collectibles'];
+    const bx = bonusItem.col*CELL+CELL/2;
+    const by = bonusItem.row*CELL+CELL/2;
+    const bob = Math.sin(animFrame*0.12)*3;
+    const expiring = bonusItem.timer < 60*3; // last 3s
+    if (expiring && animFrame%20 < 10) return; // blink
+    if (coll) {
+      const fi = bonusItem.def.frames[Math.floor(animFrame/20)%2];
+      const img = coll[fi];
+      if (img) {
+        const ds = CELL*0.85;
+        ctx.drawImage(img, bx-ds/2, by-ds/2+bob, ds, ds);
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -1199,6 +1281,9 @@ function drawOfficial(o) {
   const charType=CHAR_TYPES[o.pers];
   const r=CELL/2-2;
 
+  // Drunk wobble — sway side-to-side when wine bottle active
+  const drunkOffsetX = (slowTimer>0 && o.state==='chase') ? Math.sin(animFrame*0.25 + o.pers*1.3)*4 : 0;
+
   if (o.state==='return') {
     // Ghost effect: translucent scared sprite + glow
     ctx.save();
@@ -1222,9 +1307,9 @@ function drawOfficial(o) {
   if (o.state==='hq') ctx.globalAlpha=0.65;
   if (warnFlash)       ctx.globalAlpha=0.38;
 
-  if (!drawEntitySprite(charType, state, o.dir, o.x, o.y)) {
+  if (!drawEntitySprite(charType, state, o.dir, o.x+drunkOffsetX, o.y)) {
     // Canvas fallback
-    ctx.translate(o.x, o.y);
+    ctx.translate(o.x+drunkOffsetX, o.y);
     ctx.fillStyle=state==='scared'?'#2244cc':o.color;
     ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
     ctx.font=`${r*1.3}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
