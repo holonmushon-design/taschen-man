@@ -794,7 +794,15 @@ function checkCollisions() {
       comicPanel = { charIdx: officials.indexOf(o), mood: 'chase', key: catchKey, phrase: catchPhrase, timer: COMIC_SHOW, alpha: 1 };
       comicCooldown = COMIC_GAP;
       if(lives<=0){
-        if(boardQualifies(score)){ gameState='initials'; initialsEntry=''; msgEl.textContent=''; mobileInputEl.value=''; mobileInputEl.focus(); }
+        if(boardQualifies(score)){
+          if('ontouchstart' in window) {
+            const name = (prompt('NEW HIGH SCORE!\nEnter your 3-letter initials:','') || '???').toUpperCase().replace(/[^A-Z]/g,'').slice(0,3).padEnd(3,'_');
+            saveToBoard(name, score);
+            gameState='gameover'; msgEl.textContent='ENTER to play again';
+          } else {
+            gameState='initials'; initialsEntry=''; msgEl.textContent=''; mobileInputEl.value=''; mobileInputEl.focus();
+          }
+        }
         else { gameState='gameover'; msgEl.textContent='GAME OVER — ENTER to restart'; }
       } else{gameState='dead';msgEl.innerHTML=`<img src="assets/icons/skull_00.png" style="width:22px;height:22px;image-rendering:pixelated;vertical-align:middle"> Caught! ${lives} lives left — ENTER`;}
       return;
