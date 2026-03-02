@@ -88,6 +88,22 @@ MANIFEST = [
     ("ChatGPT Image Feb 28, 2026, 05_45_34 PM.png",
      "collectibles", "collectibles",
      "Collectibles — Mask×2  Scroll×2  Hamantaschen×2  Wine×2", S_ITEM),
+
+    ("gragger.png",
+     "items", "item_gragger",
+     "Gragger — Purim noisemaker", S_ITEM),
+
+    ("costume.png",
+     "items", "item_costume",
+     "Purim Costume — disguise", S_ITEM),
+
+    ("oil.png",
+     "items", "item_oil_can",
+     "Iranian Oil Can", S_ITEM),
+
+    ("c4.png",
+     "items", "item_charge",
+     "Shaped Charge — C4", S_ITEM),
 ]
 
 # ── background removal ─────────────────────────────────────────────

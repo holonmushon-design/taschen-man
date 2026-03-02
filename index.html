@@ -284,10 +284,10 @@ const BONUS_DEFS = [
   { key:'scroll',      frames:[2,3], effect:'score',   storable:false, label:'SCROLL', color:'#ffd700' },
   { key:'wine_cup',    frames:[8,9], effect:'life',    storable:false, label:'CUP',    color:'#cc4444' },
   { key:'wine_bottle', frames:[6,7], effect:'slow',    storable:true,  label:'WINE',   color:'#44bb44' },
-  { key:'gragger',     frames:null,  effect:'gragger', storable:true,  label:'GRAG',   color:'#ff8800' },
-  { key:'costume',     frames:null,  effect:'costume', storable:true,  label:'MASK',   color:'#9944ff' },
-  { key:'oil_can',     frames:null,  effect:'oil',     storable:true,  label:'OIL',    color:'#ddcc00' },
-  { key:'charge',      frames:null,  effect:'charge',  storable:true,  label:'C4',     color:'#cc2222' },
+  { key:'gragger',     frames:null,  spriteKey:'item_gragger',  effect:'gragger', storable:true,  label:'GRAG',   color:'#ff8800' },
+  { key:'costume',     frames:null,  spriteKey:'item_costume',  effect:'costume', storable:true,  label:'MASK',   color:'#9944ff' },
+  { key:'oil_can',     frames:null,  spriteKey:'item_oil_can',  effect:'oil',     storable:true,  label:'OIL',    color:'#ddcc00' },
+  { key:'charge',      frames:null,  spriteKey:'item_charge',   effect:'charge',  storable:true,  label:'C4',     color:'#cc2222' },
 ];
 
 const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
@@ -398,6 +398,10 @@ const SPRITE_DEFS = [
   ['jet',                   'assets/jet/jet',                          4],
   ['buildings',             'assets/buildings_a/buildings_a',          6],
   ['collectibles',          'assets/collectibles/collectibles',        10],
+  ['item_gragger',          'assets/items/item_gragger',               2],
+  ['item_costume',          'assets/items/item_costume',               2],
+  ['item_oil_can',          'assets/items/item_oil_can',               2],
+  ['item_charge',           'assets/items/item_charge',                3],
   ['compound',              'assets/hq/compound',                      1],
   ['tiles',                 'assets/tiles/street_tiles',               6],
   ['portrait_ayatollah_chase',  'assets/portraits/ayatollah_chase',    1],
@@ -894,6 +898,12 @@ function renderBackpack() {
 }
 
 function drawSlotIcon(ctx2, def) {
+  // Sprite from own sheet (show frame 0 — static in HUD)
+  if(def.spriteKey && SP[def.spriteKey]) {
+    const img=SP[def.spriteKey][0];
+    if(img) { ctx2.drawImage(img,2,2,28,28); return; }
+  }
+  // Sprite from collectibles sheet
   const coll=SP['collectibles'];
   if(def.frames && coll) {
     const img=coll[def.frames[0]];
@@ -935,6 +945,13 @@ function drawSlotIcon(ctx2, def) {
 }
 
 function drawBonusItemCanvas(key, cx, cy, size) {
+  // Use sprite if available
+  const spKey = key==='gragger'?'item_gragger':key==='costume'?'item_costume':key==='oil_can'?'item_oil_can':key==='charge'?'item_charge':null;
+  if(spKey && SP[spKey]) {
+    const fi = (key==='charge') ? Math.floor(animFrame/15)%3 : Math.floor(animFrame/20)%2;
+    const img = SP[spKey][Math.min(fi, SP[spKey].length-1)];
+    if(img) { ctx.drawImage(img, cx-size/2, cy-size/2, size, size); return; }
+  }
   const h=size/2;
   ctx.save();
   if(key==='gragger') {
