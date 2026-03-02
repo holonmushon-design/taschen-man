@@ -642,7 +642,7 @@ let touchX = 0, touchY = 0;
 canvas.addEventListener('touchstart', e => {
   touchX = e.touches[0].clientX;
   touchY = e.touches[0].clientY;
-  e.preventDefault();
+  if (gameState === 'playing') e.preventDefault(); // only block scroll during play
 }, { passive: false });
 
 // Tap anywhere → advance game state
@@ -697,10 +697,10 @@ if (isMobile) {
   function dpadDir(dir) {
     if (gameState === 'playing') player.nextDir = dir;
   }
-  document.getElementById('dpad-up'   ).addEventListener('touchstart', e=>{ dpadDir(UP);    e.preventDefault(); }, {passive:false});
-  document.getElementById('dpad-down' ).addEventListener('touchstart', e=>{ dpadDir(DOWN);  e.preventDefault(); }, {passive:false});
-  document.getElementById('dpad-left' ).addEventListener('touchstart', e=>{ dpadDir(LEFT);  e.preventDefault(); }, {passive:false});
-  document.getElementById('dpad-right').addEventListener('touchstart', e=>{ dpadDir(RIGHT); e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-up'   ).addEventListener('touchstart', e=>{ dpadDir(UP);    if(gameState==='playing') e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-down' ).addEventListener('touchstart', e=>{ dpadDir(DOWN);  if(gameState==='playing') e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-left' ).addEventListener('touchstart', e=>{ dpadDir(LEFT);  if(gameState==='playing') e.preventDefault(); }, {passive:false});
+  document.getElementById('dpad-right').addEventListener('touchstart', e=>{ dpadDir(RIGHT); if(gameState==='playing') e.preventDefault(); }, {passive:false});
 
   const rotateHint = document.getElementById('rotate-hint');
   function checkOrientation() {
