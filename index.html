@@ -251,18 +251,49 @@ canvas { display: block; image-rendering: pixelated; }
 // ═══════════════════════════════════════════════════
 const COLS = 20, ROWS = 20;
 const DPR  = window.devicePixelRatio || 1;
+const isMobile = 'ontouchstart' in window;
+
 const avH  = Math.min(window.innerHeight - 80, 780);
 const avW  = window.innerWidth - 20;
 let CELL   = Math.floor(Math.min(avH / ROWS, avW / COLS));
 if (CELL % 2 !== 0) CELL--;
 CELL = Math.max(18, Math.min(40, CELL));
 
+// Camera / viewport — mobile gets a bigger canvas + zoom
+let canvasCSSW, canvasCSSH, ZOOM, viewW, viewH;
+if (isMobile) {
+  const mobileBarH = 140;
+  canvasCSSW = avW;
+  canvasCSSH = Math.max(200, window.innerHeight - 80 - mobileBarH);
+  ZOOM = Math.min(canvasCSSW, canvasCSSH) / (11 * CELL);
+  if (ZOOM > 1) {
+    // Ensure viewport never exceeds world dimensions
+    ZOOM = Math.max(ZOOM, canvasCSSW / (COLS * CELL), canvasCSSH / (ROWS * CELL));
+    viewW = canvasCSSW / ZOOM;
+    viewH = canvasCSSH / ZOOM;
+  } else {
+    // Screen too small for meaningful zoom — fall back to original sizing
+    canvasCSSW = COLS * CELL;
+    canvasCSSH = ROWS * CELL;
+    ZOOM = 1;
+    viewW = canvasCSSW;
+    viewH = canvasCSSH;
+  }
+} else {
+  canvasCSSW = COLS * CELL;
+  canvasCSSH = ROWS * CELL;
+  ZOOM = 1;
+  viewW = canvasCSSW;
+  viewH = canvasCSSH;
+}
+let camX = 0, camY = 0;
+
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
-canvas.width  = COLS * CELL * DPR;
-canvas.height = ROWS * CELL * DPR;
-canvas.style.width  = `${COLS * CELL}px`;
-canvas.style.height = `${ROWS * CELL}px`;
+canvas.width  = canvasCSSW * DPR;
+canvas.height = canvasCSSH * DPR;
+canvas.style.width  = `${canvasCSSW}px`;
+canvas.style.height = `${canvasCSSH}px`;
 ctx.scale(DPR, DPR);
 
 // ═══════════════════════════════════════════════════
@@ -294,7 +325,6 @@ const WALL=1, DOT=0, MASK=2, EMPTY=3, HQ=4, DOOR=5;
 const UP={dx:0,dy:-1}, DOWN={dx:0,dy:1}, LEFT={dx:-1,dy:0}, RIGHT={dx:1,dy:0};
 const DIRS=[UP,DOWN,LEFT,RIGHT];
 
-const isMobile = 'ontouchstart' in window;
 const ACT      = isMobile ? 'TAP' : 'ENTER';
 const VERSION  = (() => {
   const d = new Date(document.lastModified);
@@ -587,6 +617,29 @@ function walkable(c,r,canHQ) {
 }
 function hud() { scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level; hiscoreEl.textContent=Math.max(topScore(), score); }
 
+function updateCamera() {
+  if (!isMobile || ZOOM <= 1) return;
+  const worldW = COLS * CELL, worldH = ROWS * CELL;
+  const targetX = player.x - viewW / 2;
+  const targetY = player.y - viewH / 2;
+  // Snap on tunnel wrap: detect position jumps > 70% viewW
+  if (Math.abs(targetX - camX) > viewW * 0.7) {
+    camX = targetX;
+    camY = targetY;
+  } else {
+    camX += (targetX - camX) * 0.1;
+    camY += (targetY - camY) * 0.1;
+  }
+  camX = Math.max(0, Math.min(worldW - viewW, camX));
+  camY = Math.max(0, Math.min(worldH - viewH, camY));
+}
+
+function setCameraInstant(px, py) {
+  if (!isMobile || ZOOM <= 1) return;
+  camX = Math.max(0, Math.min(COLS * CELL - viewW, px - viewW / 2));
+  camY = Math.max(0, Math.min(ROWS * CELL - viewH, py - viewH / 2));
+}
+
 function startMusic() {
   bgm.volume = 0.55;
   if (!musicStarted) musicStarted = true;
@@ -654,6 +707,7 @@ function initLevel(keepCharge=false) {
     return { x:p.x,y:p.y, dir:s.dir, state:'chase', pers:i,
              eatDelay:0, releaseTimer:0, color:s.color, face:s.face };
   });
+  setCameraInstant(player.x, player.y);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1491,11 +1545,6 @@ function drawPlayer() {
       ctx.beginPath(); ctx.ellipse(r*0.1,-r*0.3,r*0.32,r*0.26,0,0,Math.PI*2); ctx.fill();
     }
     ctx.restore();
-    // Timer bar
-    const frac=pilotTimer/PILOT_FRAMES;
-    const warn=pilotTimer<WARN_FRAMES&&animFrame%16<8;
-    ctx.fillStyle=warn?'#ff4400':'#3399ff';
-    ctx.fillRect(0,ROWS*CELL-4,frac*COLS*CELL,4);
     return;
   }
 
@@ -1725,7 +1774,7 @@ function drawLeaderboard(cx, topY) {
 }
 
 function drawOverlay() {
-  const W=COLS*CELL, H=ROWS*CELL;
+  const W=canvasCSSW, H=canvasCSSH;
   if (gameState==='start') {
     ctx.fillStyle='rgba(0,0,17,0.78)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';
@@ -1839,7 +1888,7 @@ function drawOverlay() {
 //  DRAW — LOADING SCREEN
 // ═══════════════════════════════════════════════════
 function drawLoading() {
-  const W=COLS*CELL, H=ROWS*CELL;
+  const W=canvasCSSW, H=canvasCSSH;
   ctx.fillStyle='#000011'; ctx.fillRect(0,0,W,H);
   const pct=assetsTotal>0?assetsLoaded/assetsTotal:0;
   ctx.fillStyle='#222'; ctx.fillRect(W*0.15,H/2-8,W*0.7,16);
@@ -1868,7 +1917,18 @@ function drawBuildingCanvas(type, x, y) {
 // ═══════════════════════════════════════════════════
 function draw() {
   if (!assetsReady) { drawLoading(); return; }
-  ctx.fillStyle='#000011'; ctx.fillRect(0,0,COLS*CELL,ROWS*CELL);
+  if (isMobile && ZOOM > 1 && gameState === 'playing') updateCamera();
+
+  // Clear full canvas in screen coords
+  ctx.fillStyle='#000011'; ctx.fillRect(0,0,canvasCSSW,canvasCSSH);
+
+  // Apply camera transform on mobile
+  if (isMobile && ZOOM > 1) {
+    ctx.save();
+    ctx.scale(ZOOM, ZOOM);
+    ctx.translate(-camX, -camY);
+  }
+
   drawMaze();
   drawHQBuilding();
   drawDots();
@@ -1877,6 +1937,17 @@ function draw() {
   if(gameState!=='dead') drawPlayer();
   officials.forEach(drawOfficial);
   drawFloats();
+
+  if (isMobile && ZOOM > 1) ctx.restore();
+
+  // Pilot timer bar — screen coords so it spans the canvas bottom
+  if (player.pilotMode && pilotTimer > 0) {
+    const frac = pilotTimer / PILOT_FRAMES;
+    const warn = pilotTimer < WARN_FRAMES && animFrame % 16 < 8;
+    ctx.fillStyle = warn ? '#ff4400' : '#3399ff';
+    ctx.fillRect(0, canvasCSSH - 4, frac * canvasCSSW, 4);
+  }
+
   updateComicPanel();
   drawOverlay();
 }
