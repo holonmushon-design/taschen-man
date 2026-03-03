@@ -288,6 +288,8 @@ if (isMobile) {
   viewH = canvasCSSH;
 }
 let camX = 0, camY = 0;
+const MOVE_RATE = (isMobile && ZOOM > 1) ? 0.9 : 1.0;
+let moveAccum = 0;
 
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -1300,8 +1302,13 @@ function update() {
     if(bonusSpawnTimer<=0) spawnBonus();
   }
 
-  movePlayer(); movePlane(); collectDot(); collectBonus(); updateTrap();
-  officials.forEach(o=>{ if(o.eatDelay>0)o.eatDelay--; moveOfficial(o); });
+  moveAccum += MOVE_RATE;
+  if (moveAccum >= 1) {
+    moveAccum -= 1;
+    movePlayer(); movePlane();
+    officials.forEach(o=>{ if(o.eatDelay>0)o.eatDelay--; moveOfficial(o); });
+  }
+  collectDot(); collectBonus(); updateTrap();
   checkCollisions();
   for(let i=floats.length-1;i>=0;i--){floats[i].y-=1;floats[i].alpha-=0.02;if(floats[i].alpha<=0)floats.splice(i,1);}
 
