@@ -300,11 +300,14 @@ ctx.scale(DPR, DPR);
 // ═══════════════════════════════════════════════════
 //  CONSTANTS
 // ═══════════════════════════════════════════════════
-const SPEED_PLAYER   = 2;
-const SPEED_OFFICIAL = 2;
-const SPEED_SCARED   = 1;
-const SPEED_RETURN   = 2;
-const SPEED_DRUNK    = 1;
+// Scale movement so cells-per-second feels the same regardless of CELL size
+// Desktop CELL≈38 → speed 2 → 19 frames/cell; Mobile CELL=18 → speed 1 → 18 frames/cell
+const _spd             = (CELL < 24) ? 1 : 2;
+const SPEED_PLAYER     = _spd;
+const SPEED_OFFICIAL   = _spd;
+const SPEED_SCARED     = 1;
+const SPEED_RETURN     = _spd;
+const SPEED_DRUNK      = 1;
 const PILOT_FRAMES   = 600;
 const WARN_FRAMES    = 180;
 
