@@ -633,8 +633,8 @@ function updateCamera() {
     camX = targetX;
     camY = targetY;
   } else {
-    camX += (targetX - camX) * 0.1;
-    camY += (targetY - camY) * 0.1;
+    camX += (targetX - camX) * 0.25;
+    camY += (targetY - camY) * 0.25;
   }
   camX = Math.max(0, Math.min(worldW - viewW, camX));
   camY = Math.max(0, Math.min(worldH - viewH, camY));
