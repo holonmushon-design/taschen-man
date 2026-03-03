@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <title>Taschen-Man 🎭</title>
@@ -136,6 +136,7 @@ canvas { display: block; image-rendering: pixelated; }
   flex-direction: row;
   align-items: center;
   min-height: 130px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── D-pad ───────────────────────────────────────────── */
@@ -262,7 +263,7 @@ CELL = Math.max(18, Math.min(40, CELL));
 // Camera / viewport — mobile gets a bigger canvas + zoom
 let canvasCSSW, canvasCSSH, ZOOM, viewW, viewH;
 if (isMobile) {
-  const mobileBarH = 140;
+  const mobileBarH = 174; // 130px bar + ~10px border/margin + ~34px safe-area
   canvasCSSW = avW;
   canvasCSSH = Math.max(200, window.innerHeight - 80 - mobileBarH);
   ZOOM = Math.min(canvasCSSW, canvasCSSH) / (11 * CELL);
