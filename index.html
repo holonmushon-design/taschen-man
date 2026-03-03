@@ -398,6 +398,111 @@ function sfxDeath() {
   });
 }
 
+function sfxEatEnemy() {
+  sfx(ac => {
+    // Crunchy hit — short noise burst + descending tone
+    const dur = 0.15;
+    const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.3, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + dur);
+    src.connect(g).connect(ac.destination); src.start();
+    // Tone
+    const osc = ac.createOscillator(); osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, ac.currentTime + 0.12);
+    const g2 = ac.createGain();
+    g2.gain.setValueAtTime(0.2, ac.currentTime);
+    g2.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.12);
+    osc.connect(g2).connect(ac.destination);
+    osc.start(); osc.stop(ac.currentTime + 0.12);
+  });
+}
+function sfxPickup() {
+  sfx(ac => {
+    // Quick bright ding — two rising tones
+    [660, 880].forEach((freq, i) => {
+      const osc = ac.createOscillator(); osc.type = 'sine';
+      osc.frequency.value = freq;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.2, ac.currentTime + i * 0.07);
+      g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + i * 0.07 + 0.12);
+      osc.connect(g).connect(ac.destination);
+      osc.start(ac.currentTime + i * 0.07);
+      osc.stop(ac.currentTime + i * 0.07 + 0.12);
+    });
+  });
+}
+function sfxUseItem() {
+  sfx(ac => {
+    // Activation whoosh — filtered noise sweep
+    const dur = 0.25;
+    const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const filt = ac.createBiquadFilter();
+    filt.type = 'bandpass'; filt.Q.value = 5;
+    filt.frequency.setValueAtTime(300, ac.currentTime);
+    filt.frequency.exponentialRampToValueAtTime(3000, ac.currentTime + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.3, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + dur);
+    src.connect(filt).connect(g).connect(ac.destination); src.start();
+  });
+}
+function sfxGragger() {
+  sfx(ac => {
+    // Ratchet noisemaker — rapid clicking bursts
+    for (let i = 0; i < 8; i++) {
+      const t = ac.currentTime + i * 0.04;
+      const osc = ac.createOscillator(); osc.type = 'sawtooth';
+      osc.frequency.value = 120 + Math.random() * 80;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + 0.03);
+      osc.connect(g).connect(ac.destination);
+      osc.start(t); osc.stop(t + 0.03);
+    }
+  });
+}
+function sfxLevelComplete() {
+  sfx(ac => {
+    // Victory fanfare — ascending major chord arpeggio
+    const notes = [523, 659, 784, 1047, 1319]; // C5 E5 G5 C6 E6
+    notes.forEach((freq, i) => {
+      const osc = ac.createOscillator(); osc.type = 'square';
+      osc.frequency.value = freq;
+      const g = ac.createGain();
+      const t = ac.currentTime + i * 0.1;
+      g.gain.setValueAtTime(0.15, t);
+      g.gain.setValueAtTime(0.15, t + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.01, t + (i === notes.length - 1 ? 0.4 : 0.12));
+      osc.connect(g).connect(ac.destination);
+      osc.start(t); osc.stop(t + (i === notes.length - 1 ? 0.4 : 0.12));
+    });
+  });
+}
+function sfxGameOver() {
+  sfx(ac => {
+    // Dramatic descending minor — slow gloomy sting
+    const notes = [392, 370, 330, 262]; // G4 F#4 E4 C4
+    notes.forEach((freq, i) => {
+      const osc = ac.createOscillator(); osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const g = ac.createGain();
+      const t = ac.currentTime + i * 0.2;
+      g.gain.setValueAtTime(0.22, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+      osc.connect(g).connect(ac.destination);
+      osc.start(t); osc.stop(t + 0.25);
+    });
+  });
+}
+
 // ── Screen shake ─────────────────────────────────────
 let shakeTimer = 0, shakeMaxTimer = 0, shakeIntensity = 0;
 function startShake(frames, intensity) { shakeTimer = shakeMaxTimer = frames; shakeIntensity = intensity; }
@@ -847,7 +952,7 @@ document.addEventListener('keydown',e=>{
     } else if (e.code==='Enter'||e.code==='Space') {
       const name = (initialsEntry + '___').slice(0,3);
       saveToBoard(name, score);
-      gameState='gameover'; msgEl.textContent=`${ACT} to play again`;
+      gameState='gameover'; sfxGameOver(); msgEl.textContent=`${ACT} to play again`;
     }
     return;
   }
@@ -922,7 +1027,7 @@ mobileInputEl.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === 'Go') {
     const name = (initialsEntry + '___').slice(0,3);
     saveToBoard(name, score);
-    gameState='gameover'; msgEl.textContent=`${ACT} to play again`;
+    gameState='gameover'; sfxGameOver(); msgEl.textContent=`${ACT} to play again`;
     mobileInputEl.blur();
   }
 });
@@ -989,10 +1094,10 @@ function collectDot() {
   const t=getCell(c,r);
   if (t===DOT) {
     setCell(c,r,EMPTY); score+=10; dotsLeft--; hud();
-    if(dotsLeft<=0){bonusItem=null;gameState='levelclear';msgEl.textContent=`Level ${level} done! ${ACT} to continue`;}
+    if(dotsLeft<=0){bonusItem=null;sfxLevelComplete();gameState='levelclear';msgEl.textContent=`Level ${level} done! ${ACT} to continue`;}
   } else if (t===MASK) {
     setCell(c,r,EMPTY); score+=50; dotsLeft--; hud();
-    if(dotsLeft<=0){bonusItem=null;gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ${ACT} to continue`;return;}
+    if(dotsLeft<=0){bonusItem=null;sfxLevelComplete();gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ${ACT} to continue`;return;}
     player.trapCol=c; player.trapRow=r;
     trap={col:c,row:r,phase:'opening',frame:0,maxFrames:22};
     sfxPowerUp();
@@ -1017,23 +1122,28 @@ function useItem(slot) {
   backpack.splice(slot,1);
   renderBackpack();
   if(def.effect==='slow') {
+    sfxUseItem();
     slowTimer=60*8;
     floats.push({text:'ENEMIES DRUNK!',x:player.x,y:player.y,alpha:1});
     msgEl.textContent='Enemies drunk for 8s!';
   } else if(def.effect==='gragger') {
+    sfxGragger();
     gragTimer=60*5;
     officials.forEach(o=>{if(o.state==='chase'||o.state==='exit'){o.state='scared';o.eatDelay=30;}});
     floats.push({text:'GRAGGER!',x:player.x,y:player.y,alpha:1});
     msgEl.textContent='GRAGGER — enemies scared!';
   } else if(def.effect==='costume') {
+    sfxUseItem();
     costumeTimer=60*8;
     floats.push({text:'INVISIBLE!',x:player.x,y:player.y,alpha:1});
     msgEl.textContent='Purim costume on — 8s!';
   } else if(def.effect==='oil') {
+    sfxUseItem();
     oilTimer=60*5;
     floats.push({text:'OIL SPILL!',x:player.x,y:player.y,alpha:1});
     msgEl.textContent='Enemies slipping!';
   } else if(def.effect==='charge') {
+    sfxUseItem();
     chargeObj={col:col(player.x),row:row(player.y),fuse:60*3,maxFuse:60*3};
     floats.push({text:'FIRE IN THE HOLE!',x:player.x,y:player.y,alpha:1});
     msgEl.textContent='Charge placed — RUN!';
@@ -1066,7 +1176,7 @@ function detonateCharge() {
     lives--; hud(); sfxDeath();
     floats.push({text:'OUCH!',x:player.x,y:player.y,alpha:1});
     if(lives<=0){
-      gameState='gameover'; msgEl.textContent=`GAME OVER — ${ACT} to restart`;
+      gameState='gameover'; sfxGameOver(); msgEl.textContent=`GAME OVER — ${ACT} to restart`;
     } else {
       gameState='dead'; msgEl.innerHTML=`<img src="assets/icons/skull_00.png" style="width:22px;height:22px;image-rendering:pixelated;vertical-align:middle"> Own goal! ${lives} lives left — ${ACT}`;
     }
@@ -1204,7 +1314,7 @@ function collectBonus() {
     if(backpack.some(i=>i.def.key===def.key)) return; // already carrying one
     backpack.push({def});
     bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL;
-    renderBackpack();
+    renderBackpack(); sfxPickup();
     floats.push({text:def.label,x:player.x,y:player.y,alpha:1});
     msgEl.textContent=isMobile ? `${def.label} picked up! (tap bag to use)` : `${def.label} picked up! (Q/W/E to use)`;
     setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
@@ -1212,7 +1322,7 @@ function collectBonus() {
   }
 
   // Instant effects
-  bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL;
+  bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL; sfxPickup();
   if(def.effect==='score') {
     const pts=500*level; score+=pts; hud();
     floats.push({text:`+${pts}`,x:player.x,y:player.y,alpha:1});
@@ -1340,7 +1450,7 @@ function checkCollisions() {
       multKill++;
       const pts=200*(1<<(multKill-1)); score+=pts; hud();
       floats.push({text:`+${pts}`,x:o.x,y:o.y,alpha:1});
-      o.state='return'; o.dir=UP;
+      o.state='return'; o.dir=UP; sfxEatEnemy();
     } else if(!player.pilotMode&&costumeTimer<=0&&o.state==='chase'&&player.visible) {
       lives--; hud(); sfxDeath();
       // Show the catcher's portrait immediately
@@ -1354,12 +1464,12 @@ function checkCollisions() {
           if('ontouchstart' in window) {
             const name = (prompt('NEW HIGH SCORE!\nEnter your 3-letter initials:','') || '???').toUpperCase().replace(/[^A-Z]/g,'').slice(0,3).padEnd(3,'_');
             saveToBoard(name, score);
-            gameState='gameover'; msgEl.textContent=`${ACT} to play again`;
+            gameState='gameover'; sfxGameOver(); msgEl.textContent=`${ACT} to play again`;
           } else {
             gameState='initials'; initialsEntry=''; msgEl.textContent=''; mobileInputEl.value=''; mobileInputEl.focus();
           }
         }
-        else { gameState='gameover'; msgEl.textContent=`GAME OVER — ${ACT} to restart`; }
+        else { gameState='gameover'; sfxGameOver(); msgEl.textContent=`GAME OVER — ${ACT} to restart`; }
       } else{gameState='dead';msgEl.innerHTML=`<img src="assets/icons/skull_00.png" style="width:22px;height:22px;image-rendering:pixelated;vertical-align:middle"> Caught! ${lives} lives left — ${ACT}`;}
       return;
     }
