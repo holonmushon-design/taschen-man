@@ -216,6 +216,7 @@ canvas { display: block; image-rendering: pixelated; }
   }
   #mobile-bar #comic-balloon::before,
   #mobile-bar #comic-balloon::after { display: none; }
+  #bp-keys { display: none; }
 }
 </style>
 </head>
@@ -234,7 +235,7 @@ canvas { display: block; image-rendering: pixelated; }
   <div class="bp-slot" id="bp-0" onclick="useItem(0)"><canvas width="32" height="32"></canvas></div>
   <div class="bp-slot" id="bp-1" onclick="useItem(1)"><canvas width="32" height="32"></canvas></div>
   <div class="bp-slot" id="bp-2" onclick="useItem(2)"><canvas width="32" height="32"></canvas></div>
-  <span style="color:#555;font-size:9px;font-family:monospace">Q W E</span>
+  <span id="bp-keys" style="color:#555;font-size:9px;font-family:monospace">Q W E</span>
 </div>
 <div id="game-wrap">
   <div id="comic-panel">
@@ -978,7 +979,7 @@ function collectDot() {
     if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`Level ${level} done! ${ACT} to continue`;}
   } else if (t===MASK) {
     setCell(c,r,EMPTY); score+=50; dotsLeft--; hud();
-    if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ENTER to continue`;return;}
+    if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ${ACT} to continue`;return;}
     player.trapCol=c; player.trapRow=r;
     trap={col:c,row:r,phase:'opening',frame:0,maxFrames:22};
     sfxPowerUp();
@@ -1192,7 +1193,7 @@ function collectBonus() {
     bonusItem=null; bonusSpawnTimer=BONUS_INTERVAL;
     renderBackpack();
     floats.push({text:def.label,x:player.x,y:player.y,alpha:1});
-    msgEl.textContent=`${def.label} picked up! (Q/W/E to use)`;
+    msgEl.textContent=isMobile ? `${def.label} picked up! (tap bag to use)` : `${def.label} picked up! (Q/W/E to use)`;
     setTimeout(()=>{if(gameState==='playing')msgEl.textContent='';},1500);
     return;
   }
@@ -1925,7 +1926,7 @@ function drawOverlay() {
     // ── Row 1: Backpack items ─────────────────────────────────────────
     ctx.fillStyle='#FFD700'; ctx.font=`${Math.max(9,CELL*0.32)}px 'Press Start 2P'`;
     ctx.textAlign='center';
-    ctx.fillText('BACKPACK ITEMS  (store up to 3, use Q/W/E)', W/2, H*0.455);
+    ctx.fillText(isMobile ? 'BACKPACK ITEMS  (store up to 3, tap to use)' : 'BACKPACK ITEMS  (store up to 3, use Q/W/E)', W/2, H*0.455);
 
     const bagItems = [
       { spriteKey:'item_gragger', frames:null,  label:'GRAG', desc:'scares all',     color:'#ff8800' },
