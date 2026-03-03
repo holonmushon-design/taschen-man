@@ -139,6 +139,17 @@ canvas { display: block; image-rendering: pixelated; }
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+#minimap {
+  width: 80px; height: 80px;
+  border: 2px solid #444;
+  border-radius: 4px;
+  background: #111;
+  margin: 6px;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  display: none;
+}
+
 /* ── D-pad ───────────────────────────────────────────── */
 #dpad {
   position: relative;
@@ -233,6 +244,7 @@ canvas { display: block; image-rendering: pixelated; }
   <canvas id="c"></canvas>
 </div>
 <div id="mobile-bar">
+  <canvas id="minimap" width="80" height="80"></canvas>
   <!-- comic-panel moved here by JS on touch devices -->
   <div id="dpad">
     <button id="dpad-up">▲</button>
@@ -298,6 +310,13 @@ canvas.height = canvasCSSH * DPR;
 canvas.style.width  = `${canvasCSSW}px`;
 canvas.style.height = `${canvasCSSH}px`;
 ctx.scale(DPR, DPR);
+
+// Minimap (mobile only, when zoom is active)
+const minimapEl = document.getElementById('minimap');
+const miniCtx   = minimapEl.getContext('2d');
+const MINI  = 80;
+const MCELL = MINI / COLS; // 4px per cell
+if (isMobile && ZOOM > 1) minimapEl.style.display = 'block';
 
 // ═══════════════════════════════════════════════════
 //  CONSTANTS
@@ -1920,6 +1939,63 @@ function drawBuildingCanvas(type, x, y) {
 }
 
 // ═══════════════════════════════════════════════════
+//  MINIMAP (mobile zoom only)
+// ═══════════════════════════════════════════════════
+function drawMinimap() {
+  miniCtx.fillStyle = '#111';
+  miniCtx.fillRect(0, 0, MINI, MINI);
+
+  // Maze: walls, HQ, dots, masks
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = maze[r][c];
+      const mx = c * MCELL, my = r * MCELL;
+      if (t === WALL) {
+        miniCtx.fillStyle = '#2a2a3a';
+        miniCtx.fillRect(mx, my, MCELL, MCELL);
+      } else if (t === HQ || t === DOOR) {
+        miniCtx.fillStyle = '#1a1a2a';
+        miniCtx.fillRect(mx, my, MCELL, MCELL);
+      } else if (t === MASK) {
+        const pulse = 0.6 + 0.4 * Math.sin(animFrame * 0.1);
+        miniCtx.fillStyle = `rgba(255,0,200,${pulse})`;
+        miniCtx.fillRect(mx + 0.5, my + 0.5, MCELL - 1, MCELL - 1);
+      }
+    }
+  }
+
+  // Bonus item
+  if (bonusItem) {
+    miniCtx.fillStyle = bonusItem.def.color;
+    miniCtx.fillRect(bonusItem.col * MCELL + 0.5, bonusItem.row * MCELL + 0.5, MCELL - 1, MCELL - 1);
+  }
+
+  // Enemies
+  officials.forEach(o => {
+    const ox = (o.x / CELL) * MCELL, oy = (o.y / CELL) * MCELL;
+    miniCtx.fillStyle = (o.state === 'scared') ? '#3399ff' : '#ff3333';
+    miniCtx.fillRect(ox - 1, oy - 1, 3, 3);
+  });
+
+  // Player (blinking)
+  if (animFrame % 30 < 22) {
+    const px = (player.x / CELL) * MCELL, py = (player.y / CELL) * MCELL;
+    miniCtx.fillStyle = '#33ff33';
+    miniCtx.fillRect(px - 1.5, py - 1.5, 3, 3);
+  }
+
+  // Viewport rectangle
+  miniCtx.strokeStyle = 'rgba(255,215,0,0.45)';
+  miniCtx.lineWidth = 0.8;
+  miniCtx.strokeRect(
+    (camX / CELL) * MCELL,
+    (camY / CELL) * MCELL,
+    (viewW / CELL) * MCELL,
+    (viewH / CELL) * MCELL
+  );
+}
+
+// ═══════════════════════════════════════════════════
 //  MAIN DRAW
 // ═══════════════════════════════════════════════════
 function draw() {
@@ -1957,6 +2033,7 @@ function draw() {
 
   updateComicPanel();
   drawOverlay();
+  if (isMobile && ZOOM > 1 && (gameState === 'playing' || gameState === 'dead')) drawMinimap();
 }
 
 // ═══════════════════════════════════════════════════
