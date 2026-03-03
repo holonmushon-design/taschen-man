@@ -399,8 +399,8 @@ function sfxDeath() {
 }
 
 // ── Screen shake ─────────────────────────────────────
-let shakeTimer = 0, shakeIntensity = 0;
-function startShake(frames, intensity) { shakeTimer = frames; shakeIntensity = intensity; }
+let shakeTimer = 0, shakeMaxTimer = 0, shakeIntensity = 0;
+function startShake(frames, intensity) { shakeTimer = shakeMaxTimer = frames; shakeIntensity = intensity; }
 
 // ═══════════════════════════════════════════════════
 //  CONSTANTS
@@ -779,6 +779,7 @@ document.getElementById('sound-btn').addEventListener('touchstart', e => {
 function initGame() {
   leaderboard = loadBoard();
   score=0; lives=3; level=1; hud();
+  backpack=[];
   initLevel();
   gameState='start';
   msgEl.textContent= isMobile ? 'TAP to start' : 'Press ENTER or SPACE to start';
@@ -792,10 +793,21 @@ function initLevel(keepCharge=false) {
   pilotTimer=0; multKill=0; animFrame=0; floats.length=0; trap=null;
   comicPanel=null; comicCooldown=60*5;
   bonusItem=null; bonusSpawnTimer=60*8; slowTimer=0;
-  backpack=[]; gragTimer=0; costumeTimer=0; oilTimer=0; chargeObj=null; explosions.length=0;
+  gragTimer=0; costumeTimer=0; oilTimer=0; chargeObj=null; explosions.length=0;
   if(savedCharge) chargeObj=savedCharge;
   renderBackpack();
 
+  resetActors();
+}
+
+const ACTOR_STARTS=[
+  {c:4,  r:1,  dir:RIGHT, color:'#cc2200', face:'😠'},
+  {c:14, r:1,  dir:LEFT,  color:'#cc6600', face:'😡'},
+  {c:1,  r:14, dir:RIGHT, color:'#005c3a', face:'🤬'},
+  {c:18, r:14, dir:LEFT,  color:'#550066', face:'😤'},
+];
+
+function resetActors() {
   const ps=ctr(10,18);
   player={
     x:ps.x, y:ps.y,
@@ -804,18 +816,19 @@ function initLevel(keepCharge=false) {
     mouth:0.2, mouthDir:1,
     trapCol:10, trapRow:18,
   };
-
-  const starts=[
-    {c:4,  r:1,  dir:RIGHT, color:'#cc2200', face:'😠'},
-    {c:14, r:1,  dir:LEFT,  color:'#cc6600', face:'😡'},
-    {c:1,  r:14, dir:RIGHT, color:'#005c3a', face:'🤬'},
-    {c:18, r:14, dir:LEFT,  color:'#550066', face:'😤'},
-  ];
-  officials=starts.map((s,i)=>{
+  officials=ACTOR_STARTS.map((s,i)=>{
     const p=ctr(s.c,s.r);
     return { x:p.x,y:p.y, dir:s.dir, state:'chase', pers:i,
              eatDelay:0, releaseTimer:0, color:s.color, face:s.face };
   });
+}
+
+function respawn() {
+  pilotTimer=0; multKill=0; floats.length=0; trap=null;
+  comicPanel=null; comicCooldown=60*5;
+  bonusItem=null; slowTimer=0;
+  gragTimer=0; costumeTimer=0; oilTimer=0; explosions.length=0;
+  resetActors();
   setCameraInstant(player.x, player.y);
 }
 
@@ -842,7 +855,7 @@ document.addEventListener('keydown',e=>{
   if (e.code==='Enter'||e.code==='Space') {
     startMusic();
     if (gameState==='start'||gameState==='dead') {
-      if(gameState==='dead') initLevel(true); // keepCharge=true → bomb survives respawn
+      if(gameState==='dead') respawn();
       gameState='playing'; msgEl.textContent=''; return;
     }
     if (gameState==='levelclear') {
@@ -976,10 +989,10 @@ function collectDot() {
   const t=getCell(c,r);
   if (t===DOT) {
     setCell(c,r,EMPTY); score+=10; dotsLeft--; hud();
-    if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`Level ${level} done! ${ACT} to continue`;}
+    if(dotsLeft<=0){bonusItem=null;gameState='levelclear';msgEl.textContent=`Level ${level} done! ${ACT} to continue`;}
   } else if (t===MASK) {
     setCell(c,r,EMPTY); score+=50; dotsLeft--; hud();
-    if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ${ACT} to continue`;return;}
+    if(dotsLeft<=0){bonusItem=null;gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ${ACT} to continue`;return;}
     player.trapCol=c; player.trapRow=r;
     trap={col:c,row:r,phase:'opening',frame:0,maxFrames:22};
     sfxPowerUp();
@@ -1034,7 +1047,7 @@ function detonateCharge() {
   const blast=[[cc,cr],[cc-1,cr],[cc+1,cr],[cc,cr-1],[cc,cr+1]];
   triggerExplosion(cc, cr, blast);
   sfxExplosion();
-  startShake(18, 6);
+  startShake(25, isMobile ? 10 : 30);
   blast.forEach(([c,r])=>{
     if(c<1||c>=COLS-1||r<1||r>=ROWS-1) return; // border — indestructible
     const t=getCell(c,r);
@@ -2125,7 +2138,7 @@ function draw() {
   // Screen shake — CSS transform on canvas element only
   if (shakeTimer > 0) {
     shakeTimer--;
-    const decay = shakeTimer / 18;
+    const decay = shakeTimer / shakeMaxTimer;
     const sx = (Math.random() * 2 - 1) * shakeIntensity * decay;
     const sy = (Math.random() * 2 - 1) * shakeIntensity * decay;
     canvas.style.transform = `translate(${sx}px, ${sy}px)`;
