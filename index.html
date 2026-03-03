@@ -318,6 +318,89 @@ const MINI  = 80;
 const MCELL = MINI / COLS; // 4px per cell
 if (isMobile && ZOOM > 1) minimapEl.style.display = 'block';
 
+// ── SFX (Web Audio API) ─────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function sfx(fn) {
+  if (soundMuted) return;
+  // Unlock AudioContext on first interaction (mobile Safari)
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  fn(audioCtx);
+}
+function sfxExplosion() {
+  sfx(ac => {
+    // Low rumble via brown noise + pitch drop
+    const dur = 0.6;
+    const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+      last = (last + (Math.random() * 2 - 1) * 0.06) * 0.995;
+      d[i] = last * 4;
+    }
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.7, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + dur);
+    src.connect(gain).connect(ac.destination);
+    src.start();
+    // Sub bass thud
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(20, ac.currentTime + 0.4);
+    const g2 = ac.createGain();
+    g2.gain.setValueAtTime(0.6, ac.currentTime);
+    g2.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.4);
+    osc.connect(g2).connect(ac.destination);
+    osc.start(); osc.stop(ac.currentTime + 0.4);
+  });
+}
+function sfxPowerUp() {
+  sfx(ac => {
+    // Rising arpeggio
+    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+    notes.forEach((freq, i) => {
+      const osc = ac.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.18, ac.currentTime + i * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + i * 0.08 + 0.15);
+      osc.connect(g).connect(ac.destination);
+      osc.start(ac.currentTime + i * 0.08);
+      osc.stop(ac.currentTime + i * 0.08 + 0.15);
+    });
+  });
+}
+function sfxDeath() {
+  sfx(ac => {
+    // Descending wah-wah
+    const osc = ac.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(600, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, ac.currentTime + 0.6);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.25, ac.currentTime);
+    g.gain.linearRampToValueAtTime(0.12, ac.currentTime + 0.3);
+    g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.6);
+    // Wobble via LFO
+    const lfo = ac.createOscillator();
+    lfo.frequency.value = 8;
+    const lfoG = ac.createGain();
+    lfoG.gain.value = 40;
+    lfo.connect(lfoG).connect(osc.frequency);
+    osc.connect(g).connect(ac.destination);
+    lfo.start(); osc.start();
+    osc.stop(ac.currentTime + 0.6);
+    lfo.stop(ac.currentTime + 0.6);
+  });
+}
+
+// ── Screen shake ─────────────────────────────────────
+let shakeTimer = 0, shakeIntensity = 0;
+function startShake(frames, intensity) { shakeTimer = frames; shakeIntensity = intensity; }
+
 // ═══════════════════════════════════════════════════
 //  CONSTANTS
 // ═══════════════════════════════════════════════════
@@ -898,6 +981,7 @@ function collectDot() {
     if(dotsLeft<=0){gameState='levelclear';msgEl.textContent=`🎉 Level ${level} done! ENTER to continue`;return;}
     player.trapCol=c; player.trapRow=r;
     trap={col:c,row:r,phase:'opening',frame:0,maxFrames:22};
+    sfxPowerUp();
     officials.forEach(o=>{
       if(o.state==='chase'){
         o.state='scared'; o.eatDelay=60;
@@ -948,6 +1032,8 @@ function detonateCharge() {
   chargeObj=null;
   const blast=[[cc,cr],[cc-1,cr],[cc+1,cr],[cc,cr-1],[cc,cr+1]];
   triggerExplosion(cc, cr, blast);
+  sfxExplosion();
+  startShake(18, 6);
   blast.forEach(([c,r])=>{
     if(c<1||c>=COLS-1||r<1||r>=ROWS-1) return; // border — indestructible
     const t=getCell(c,r);
@@ -963,7 +1049,7 @@ function detonateCharge() {
   });
   // Operative caught in blast — lose a life
   if(player.visible && blast.some(([c,r])=>Math.abs(col(player.x)-c)<=1&&Math.abs(row(player.y)-r)<=1)){
-    lives--; hud();
+    lives--; hud(); sfxDeath();
     floats.push({text:'OUCH!',x:player.x,y:player.y,alpha:1});
     if(lives<=0){
       gameState='gameover'; msgEl.textContent=`GAME OVER — ${ACT} to restart`;
@@ -1242,7 +1328,7 @@ function checkCollisions() {
       floats.push({text:`+${pts}`,x:o.x,y:o.y,alpha:1});
       o.state='return'; o.dir=UP;
     } else if(!player.pilotMode&&costumeTimer<=0&&o.state==='chase'&&player.visible) {
-      lives--; hud();
+      lives--; hud(); sfxDeath();
       // Show the catcher's portrait immediately
       const catchKey = CHAR_KEYS[o.pers];
       const catchPhrases = COMIC_PHRASES[catchKey].chase;
@@ -1541,14 +1627,14 @@ function drawPlayer() {
     const jetArr=SP['jet'];
     let jetDrawn=false;
     if (jetArr && jetArr.length) {
-      let ji=1; // default right
-      if (player.dir===UP)   ji=0;
-      if (player.dir===DOWN) ji=2;
-      if (player.dir===LEFT) ji=1; // flip
+      let ji=1; // default left-facing sprite
+      if (player.dir===UP)    ji=0;
+      if (player.dir===DOWN)  ji=2;
+      if (player.dir===RIGHT) ji=1; // flip left-facing sprite
       ji=Math.min(ji, jetArr.length-1);
       const img=jetArr[ji];
       if (img) {
-        const flip=(player.dir===LEFT);
+        const flip=(player.dir===RIGHT);
         if (flip) { ctx.scale(-1,1); }
         ctx.drawImage(img, -s/2, -s/2, s, s);
         jetDrawn=true;
@@ -2034,6 +2120,17 @@ function draw() {
   updateComicPanel();
   drawOverlay();
   if (isMobile && ZOOM > 1 && (gameState === 'playing' || gameState === 'dead')) drawMinimap();
+
+  // Screen shake — CSS transform on canvas element only
+  if (shakeTimer > 0) {
+    shakeTimer--;
+    const decay = shakeTimer / 18;
+    const sx = (Math.random() * 2 - 1) * shakeIntensity * decay;
+    const sy = (Math.random() * 2 - 1) * shakeIntensity * decay;
+    canvas.style.transform = `translate(${sx}px, ${sy}px)`;
+  } else {
+    canvas.style.transform = '';
+  }
 }
 
 // ═══════════════════════════════════════════════════
