@@ -823,12 +823,8 @@ if (isMobile) {
   document.getElementById('dpad-left' ).addEventListener('touchstart', e=>{ dpadDir(LEFT);  if(gameState==='playing') e.preventDefault(); }, {passive:false});
   document.getElementById('dpad-right').addEventListener('touchstart', e=>{ dpadDir(RIGHT); if(gameState==='playing') e.preventDefault(); }, {passive:false});
 
-  const rotateHint = document.getElementById('rotate-hint');
-  function checkOrientation() {
-    rotateHint.style.display = window.innerWidth < window.innerHeight ? 'block' : 'none';
-  }
-  window.addEventListener('resize', checkOrientation);
-  checkOrientation();
+  // Portrait mode works fine with scrolling camera — hide rotate hint
+  document.getElementById('rotate-hint').style.display = 'none';
 }
 
 // ═══════════════════════════════════════════════════
